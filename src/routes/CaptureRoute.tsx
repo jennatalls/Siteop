@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Mic, Square, Play, Pause, Camera, Trash2, CheckCircle2, AlertCircle, RefreshCw, Sparkles } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { addToOfflineQueue, blobToBase64, uploadMediaToSupabase } from '../lib/offlineStore';
+import { processAudioWithGemini } from '../lib/geminiFallback';
 import { Toast } from '../components/Toast';
 
 interface CaptureRouteProps {
@@ -114,31 +115,9 @@ export const CaptureRoute: React.FC<CaptureRouteProps> = ({ isOnline, onEntrySav
             open: true
           });
 
-          // Trigger background AI processing
+          // Trigger background AI transcription & extraction (Vercel API + Local fallback)
           if (newEntry && voiceBase64) {
-            fetch('/api/transcribe', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                audioBase64: voiceBase64,
-                mimeType: targetAudio?.type,
-                entryId: newEntry.id
-              })
-            })
-              .then((res) => res.json())
-              .then((transResult) => {
-                if (transResult.text) {
-                  fetch('/api/extract', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                      transcription: transResult.text,
-                      entryId: newEntry.id
-                    })
-                  });
-                }
-              })
-              .catch((err) => console.warn('Background AI trigger:', err));
+            processAudioWithGemini(newEntry.id, voiceBase64, targetAudio?.type);
           }
         }
       }
