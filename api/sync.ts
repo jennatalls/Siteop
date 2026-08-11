@@ -5,7 +5,7 @@ import { Readable } from 'stream';
 
 const supabaseUrl = process.env.VITE_SUPABASE_URL || 'https://sdfdnxgxbxxbyofmeyzo.supabase.co';
 const supabaseAnonKey = process.env.VITE_SUPABASE_ANON_KEY || '';
-const folderId = process.env.GOOGLE_DRIVE_FOLDER_ID || '1so41_3Eb_jJJeTg39TBGXML2hOya5Xr6';
+const folderId = process.env.GOOGLE_DRIVE_FOLDER_ID || '1Bp_KmKCXxZblDCFXtuYVSeLziLVITLz0';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
