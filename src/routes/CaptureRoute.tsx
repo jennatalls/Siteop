@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Mic, Square, Play, Pause, Camera, Trash2, Send, CheckCircle2, AlertCircle, RefreshCw } from 'lucide-react';
+import { Mic, Square, Play, Pause, Camera, Trash2, CheckCircle2, AlertCircle, RefreshCw, Sparkles } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { addToOfflineQueue, blobToBase64, uploadMediaToSupabase } from '../lib/offlineStore';
 import { Toast } from '../components/Toast';
@@ -36,20 +36,132 @@ export const CaptureRoute: React.FC<CaptureRouteProps> = ({ isOnline, onEntrySav
   const audioPlayerRef = useRef<HTMLAudioElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  // Format recording timer: 00:15
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // Start Voice Recording (iOS Safari tested Web Audio / MediaRecorder)
+  // Internal Auto-Save Core Engine
+  const saveEntryToSupabase = async (voiceBlobParam?: Blob | null, photoBlobParam?: Blob | null) => {
+    const targetAudio = voiceBlobParam !== undefined ? voiceBlobParam : audioBlob;
+    const targetPhoto = photoBlobParam !== undefined ? photoBlobParam : photoBlob;
+
+    if (!targetAudio && !targetPhoto) return;
+
+    setIsSubmitting(true);
+
+    try {
+      const voiceBase64 = targetAudio ? await blobToBase64(targetAudio) : undefined;
+      const photoBase64 = targetPhoto ? await blobToBase64(targetPhoto) : undefined;
+
+      if (!isOnline) {
+        addToOfflineQueue({
+          voiceBlobBase64: voiceBase64,
+          photoBlobBase64: photoBase64,
+          audioMimeType: targetAudio?.type,
+          photoMimeType: targetPhoto?.type
+        });
+
+        setToast({
+          message: '⚡ Tự động lưu offline vào thiết bị (sẽ đồng bộ khi có mạng)',
+          type: 'success',
+          open: true
+        });
+      } else {
+        let voiceUrl: string | null = null;
+        let photoUrl: string | null = null;
+
+        if (targetAudio) {
+          voiceUrl = await uploadMediaToSupabase(targetAudio, 'voice-memos', `voice_${Date.now()}.mp4`);
+        }
+
+        if (targetPhoto) {
+          photoUrl = await uploadMediaToSupabase(targetPhoto, 'photos', `photo_${Date.now()}.jpg`);
+        }
+
+        const { data: userData } = await supabase.auth.getUser();
+
+        const { data: newEntry, error } = await supabase
+          .from('diary_entries')
+          .insert({
+            created_by: userData?.user?.id || null,
+            voice_url: voiceUrl,
+            photo_url: photoUrl,
+            status: 'draft',
+            submitted_at: new Date().toISOString()
+          })
+          .select()
+          .single();
+
+        if (error) {
+          console.warn('Supabase insert error, using offline fallback:', error);
+          addToOfflineQueue({
+            voiceBlobBase64: voiceBase64,
+            photoBlobBase64: photoBase64,
+            audioMimeType: targetAudio?.type,
+            photoMimeType: targetPhoto?.type
+          });
+          setToast({
+            message: '⚡ Đã lưu offline thành công',
+            type: 'info',
+            open: true
+          });
+        } else {
+          setToast({
+            message: '⚡ Tự động lưu nhật ký thành công!',
+            type: 'success',
+            open: true
+          });
+
+          // Trigger background AI processing
+          if (newEntry && voiceBase64) {
+            fetch('/api/transcribe', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                audioBase64: voiceBase64,
+                mimeType: targetAudio?.type,
+                entryId: newEntry.id
+              })
+            })
+              .then((res) => res.json())
+              .then((transResult) => {
+                if (transResult.text) {
+                  fetch('/api/extract', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      transcription: transResult.text,
+                      entryId: newEntry.id
+                    })
+                  });
+                }
+              })
+              .catch((err) => console.warn('Background AI trigger:', err));
+          }
+        }
+      }
+
+      onEntrySaved();
+    } catch (err: any) {
+      console.error('Auto save error:', err);
+      setToast({
+        message: 'Lỗi tự động lưu: ' + (err.message || 'Thử lại'),
+        type: 'error',
+        open: true
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Start Voice Recording
   const startRecording = async () => {
     try {
       audioChunksRef.current = [];
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
-      // Determine iOS supported MIME type
       let mimeType = 'audio/webm';
       if (MediaRecorder.isTypeSupported('audio/mp4')) {
         mimeType = 'audio/mp4';
@@ -68,14 +180,16 @@ export const CaptureRoute: React.FC<CaptureRouteProps> = ({ isOnline, onEntrySav
         }
       };
 
-      mediaRecorder.onstop = () => {
+      mediaRecorder.onstop = async () => {
         const finalBlob = new Blob(audioChunksRef.current, { type: mimeType });
         setAudioBlob(finalBlob);
         const url = URL.createObjectURL(finalBlob);
         setAudioUrl(url);
 
-        // Stop audio tracks
         stream.getTracks().forEach((track) => track.stop());
+
+        // AUTO-SAVE IMMEDIATELY UPON RECORDING STOP!
+        await saveEntryToSupabase(finalBlob, photoBlob);
       };
 
       mediaRecorder.start(200);
@@ -86,16 +200,16 @@ export const CaptureRoute: React.FC<CaptureRouteProps> = ({ isOnline, onEntrySav
         setRecordingTime((prev) => prev + 1);
       }, 1000);
     } catch (err: any) {
-      console.error('Error starting audio recording:', err);
+      console.error('Microphone access error:', err);
       setToast({
-        message: 'Không thể mở Micro. Vui lòng cấp quyền truy cập micro trên Safari.',
+        message: 'Vui lòng cấp quyền truy cập Micro trên Safari/Chrome.',
         type: 'error',
         open: true
       });
     }
   };
 
-  // Stop Recording
+  // Stop Recording & Trigger Auto-Save
   const stopRecording = () => {
     if (mediaRecorderRef.current && isRecording) {
       mediaRecorderRef.current.stop();
@@ -104,7 +218,19 @@ export const CaptureRoute: React.FC<CaptureRouteProps> = ({ isOnline, onEntrySav
     }
   };
 
-  // Clear Audio Recording
+  // Photo Select & Auto-Save
+  const handlePhotoSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setPhotoBlob(file);
+      const url = URL.createObjectURL(file);
+      setPhotoPreviewUrl(url);
+
+      // AUTO-SAVE IMMEDIATELY UPON PHOTO SELECTION!
+      await saveEntryToSupabase(audioBlob, file);
+    }
+  };
+
   const clearAudio = () => {
     setAudioBlob(null);
     if (audioUrl) URL.revokeObjectURL(audioUrl);
@@ -112,7 +238,13 @@ export const CaptureRoute: React.FC<CaptureRouteProps> = ({ isOnline, onEntrySav
     setRecordingTime(0);
   };
 
-  // Toggle Audio Playback
+  const clearPhoto = () => {
+    setPhotoBlob(null);
+    if (photoPreviewUrl) URL.revokeObjectURL(photoPreviewUrl);
+    setPhotoPreviewUrl(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
   const togglePlayAudio = () => {
     if (!audioPlayerRef.current || !audioUrl) return;
     if (isPlayingAudio) {
@@ -121,147 +253,6 @@ export const CaptureRoute: React.FC<CaptureRouteProps> = ({ isOnline, onEntrySav
     } else {
       audioPlayerRef.current.play();
       setIsPlayingAudio(true);
-    }
-  };
-
-  // Photo Select / Capture
-  const handlePhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      setPhotoBlob(file);
-      const url = URL.createObjectURL(file);
-      setPhotoPreviewUrl(url);
-    }
-  };
-
-  // Clear Photo
-  const clearPhoto = () => {
-    setPhotoBlob(null);
-    if (photoPreviewUrl) URL.revokeObjectURL(photoPreviewUrl);
-    setPhotoPreviewUrl(null);
-    if (fileInputRef.current) fileInputRef.current.value = '';
-  };
-
-  // Submit Handler: Saves online to Supabase or queues to localStorage offline
-  const handleSubmit = async () => {
-    if (!audioBlob && !photoBlob) {
-      setToast({
-        message: 'Vui lòng thu âm hoặc chọn 1 bức ảnh trước khi lưu!',
-        type: 'info',
-        open: true
-      });
-      return;
-    }
-
-    setIsSubmitting(true);
-
-    try {
-      const voiceBase64 = audioBlob ? await blobToBase64(audioBlob) : undefined;
-      const photoBase64 = photoBlob ? await blobToBase64(photoBlob) : undefined;
-
-      if (!isOnline) {
-        // Offline -> Queue to localStorage
-        addToOfflineQueue({
-          voiceBlobBase64: voiceBase64,
-          photoBlobBase64: photoBase64,
-          audioMimeType: audioBlob?.type,
-          photoMimeType: photoBlob?.type
-        });
-
-        setToast({
-          message: 'Đã lưu offline vào thiết bị! Sẽ tự động đồng bộ khi có mạng.',
-          type: 'success',
-          open: true
-        });
-      } else {
-        // Online -> Upload to Supabase Storage & Insert Table
-        let voiceUrl: string | null = null;
-        let photoUrl: string | null = null;
-
-        if (audioBlob) {
-          voiceUrl = await uploadMediaToSupabase(audioBlob, 'voice-memos', `voice_${Date.now()}.mp4`);
-        }
-
-        if (photoBlob) {
-          photoUrl = await uploadMediaToSupabase(photoBlob, 'photos', `photo_${Date.now()}.jpg`);
-        }
-
-        const { data: userData } = await supabase.auth.getUser();
-
-        const { data: newEntry, error } = await supabase
-          .from('diary_entries')
-          .insert({
-            created_by: userData?.user?.id || null,
-            voice_url: voiceUrl,
-            photo_url: photoUrl,
-            status: 'draft',
-            submitted_at: new Date().toISOString()
-          })
-          .select()
-          .single();
-
-        if (error) {
-          console.warn('Supabase insert error, saving offline fallback:', error);
-          addToOfflineQueue({
-            voiceBlobBase64: voiceBase64,
-            photoBlobBase64: photoBase64,
-            audioMimeType: audioBlob?.type,
-            photoMimeType: photoBlob?.type
-          });
-          setToast({
-            message: 'Lưu offline thành công (chờ kết nối CSDL).',
-            type: 'info',
-            open: true
-          });
-        } else {
-          setToast({
-            message: 'Saved! Đã lưu nhật ký thành công.',
-            type: 'success',
-            open: true
-          });
-
-          // Trigger background transcription / extraction if backend API function available
-          if (newEntry && voiceBase64) {
-            fetch('/api/transcribe', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                audioBase64: voiceBase64,
-                mimeType: audioBlob?.type,
-                entryId: newEntry.id
-              })
-            })
-              .then((res) => res.json())
-              .then((transResult) => {
-                if (transResult.text) {
-                  fetch('/api/extract', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                      transcription: transResult.text,
-                      entryId: newEntry.id
-                    })
-                  });
-                }
-              })
-              .catch((err) => console.warn('Background AI extraction trigger:', err));
-          }
-        }
-      }
-
-      // Clear Form for next entry
-      clearAudio();
-      clearPhoto();
-      onEntrySaved();
-    } catch (err: any) {
-      console.error('Submit error:', err);
-      setToast({
-        message: 'Lỗi khi lưu: ' + (err.message || 'Thử lại'),
-        type: 'error',
-        open: true
-      });
-    } finally {
-      setIsSubmitting(false);
     }
   };
 
@@ -276,12 +267,17 @@ export const CaptureRoute: React.FC<CaptureRouteProps> = ({ isOnline, onEntrySav
 
       {/* Screen Title */}
       <div className="text-center space-y-1">
-        <h2 className="text-xl font-bold text-slate-100 tracking-tight">Ghi Nhận Nhật Ký</h2>
-        <p className="text-xs text-slate-400">Thu âm giọng nói hoặc chụp ảnh công trình hôm nay</p>
+        <h2 className="text-xl font-bold text-slate-100 tracking-tight flex items-center justify-center gap-1.5">
+          <span>Ghi Nhận Nhật Ký</span>
+          <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+            ⚡ Tự Động Lưu
+          </span>
+        </h2>
+        <p className="text-xs text-slate-400">Chạm thu âm hoặc chụp ảnh — Tự động lưu tức thì</p>
       </div>
 
       {/* Voice Recorder Card */}
-      <div className="glass-card rounded-3xl p-6 text-center space-y-5 border border-slate-700/60 shadow-xl">
+      <div className="glass-card rounded-3xl p-6 text-center space-y-5 border border-slate-700/60 shadow-xl relative overflow-hidden">
         <div className="flex items-center justify-between text-xs text-slate-400 font-medium px-1">
           <span className="flex items-center gap-1.5">
             <Mic className="w-4 h-4 text-sky-400" /> Ghi Âm Giọng Nói
@@ -295,7 +291,8 @@ export const CaptureRoute: React.FC<CaptureRouteProps> = ({ isOnline, onEntrySav
             <button
               type="button"
               onClick={startRecording}
-              className="group relative w-24 h-24 rounded-full bg-gradient-to-tr from-sky-500 to-indigo-600 p-1 flex items-center justify-center shadow-2xl shadow-sky-500/30 hover:scale-105 active:scale-95 transition-all"
+              disabled={isSubmitting}
+              className="group relative w-24 h-24 rounded-full bg-gradient-to-tr from-sky-500 to-indigo-600 p-1 flex items-center justify-center shadow-2xl shadow-sky-500/30 hover:scale-105 active:scale-95 transition-all disabled:opacity-50"
             >
               <div className="w-full h-full rounded-full bg-slate-950 flex items-center justify-center group-hover:bg-slate-900 transition">
                 <Mic className="w-10 h-10 text-sky-400 group-hover:text-sky-300" />
@@ -309,11 +306,19 @@ export const CaptureRoute: React.FC<CaptureRouteProps> = ({ isOnline, onEntrySav
             >
               <div className="w-full h-full rounded-full bg-slate-950 flex flex-col items-center justify-center gap-1">
                 <Square className="w-8 h-8 text-rose-500 fill-rose-500" />
-                <span className="text-[10px] font-bold text-rose-400 tracking-wider">DỪNG</span>
+                <span className="text-[10px] font-bold text-rose-400 tracking-wider">DỪNG & LƯU</span>
               </div>
             </button>
           )}
         </div>
+
+        {/* Status Indicator */}
+        {isSubmitting && (
+          <div className="flex items-center justify-center gap-2 text-xs text-sky-400 font-semibold animate-pulse">
+            <RefreshCw className="w-4 h-4 animate-spin" />
+            <span>Đang tự động lưu nhật ký...</span>
+          </div>
+        )}
 
         {/* Audio Player Preview */}
         {audioUrl && !isRecording && (
@@ -325,7 +330,7 @@ export const CaptureRoute: React.FC<CaptureRouteProps> = ({ isOnline, onEntrySav
               {isPlayingAudio ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5 ml-0.5" />}
             </button>
             <div className="flex-1 text-left">
-              <p className="text-xs font-semibold text-slate-200">Bản ghi đã sẵn sàng</p>
+              <p className="text-xs font-semibold text-slate-200">Ghi âm vừa tự động lưu</p>
               <p className="text-[10px] text-slate-400">Thời lượng: {formatTime(recordingTime)}</p>
             </div>
             <button
@@ -351,6 +356,7 @@ export const CaptureRoute: React.FC<CaptureRouteProps> = ({ isOnline, onEntrySav
           <span className="flex items-center gap-1.5">
             <Camera className="w-4 h-4 text-amber-400" /> Chụp / Chọn Ảnh Công Trình
           </span>
+          <span className="text-[10px] text-emerald-400 font-semibold">Tự động lưu sau khi chọn</span>
         </div>
 
         {photoPreviewUrl ? (
@@ -366,7 +372,8 @@ export const CaptureRoute: React.FC<CaptureRouteProps> = ({ isOnline, onEntrySav
         ) : (
           <button
             onClick={() => fileInputRef.current?.click()}
-            className="w-full h-32 rounded-2xl border-2 border-dashed border-slate-700 hover:border-amber-400/50 bg-slate-900/40 hover:bg-slate-900/80 flex flex-col items-center justify-center gap-2 transition cursor-pointer"
+            disabled={isSubmitting}
+            className="w-full h-32 rounded-2xl border-2 border-dashed border-slate-700 hover:border-amber-400/50 bg-slate-900/40 hover:bg-slate-900/80 flex flex-col items-center justify-center gap-2 transition cursor-pointer disabled:opacity-50"
           >
             <Camera className="w-8 h-8 text-amber-400/80" />
             <span className="text-xs text-slate-300 font-medium">Chạm để chụp hoặc chọn ảnh</span>
@@ -382,25 +389,6 @@ export const CaptureRoute: React.FC<CaptureRouteProps> = ({ isOnline, onEntrySav
           className="hidden"
         />
       </div>
-
-      {/* Big Submit Button */}
-      <button
-        onClick={handleSubmit}
-        disabled={isSubmitting || (!audioBlob && !photoBlob)}
-        className="w-full py-4 rounded-2xl bg-gradient-to-r from-sky-400 via-sky-500 to-indigo-500 hover:from-sky-300 hover:to-indigo-400 text-slate-950 font-bold text-base shadow-xl shadow-sky-500/25 active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-      >
-        {isSubmitting ? (
-          <>
-            <RefreshCw className="w-5 h-5 animate-spin" />
-            <span>Đang Lưu Nhật Ký...</span>
-          </>
-        ) : (
-          <>
-            <Send className="w-5 h-5" />
-            <span>Lưu Nhật Ký Ngày</span>
-          </>
-        )}
-      </button>
     </div>
   );
 };
