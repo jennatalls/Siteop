@@ -80,7 +80,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
 
     const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-flash-latest' });
 
     const systemPrompt = `Bạn là chuyên gia quản lý công trình xây dựng tại Việt Nam.
 Dựa vào danh sách nhật ký công trình ngày ${targetDate} được cung cấp bên dưới, hãy tổng hợp báo cáo ngày theo đúng JSON format:

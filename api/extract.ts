@@ -59,7 +59,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-flash-latest' });
 
     const prompt = `Bạn là chuyên gia quản lý công trình xây dựng tại Việt Nam.
 Hãy phân tích đoạn nhật ký công trình sau và trích xuất dữ liệu cấu trúc JSON:
