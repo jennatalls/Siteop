@@ -16,7 +16,6 @@ import {
 import { DailyDigest, DiaryEntry, EntryFlag } from '../lib/types';
 import { supabase } from '../lib/supabase';
 import { Toast } from '../components/Toast';
-import { GoogleGenerativeAI } from '@google/generative-ai';
 
 interface DigestRouteProps {
   onRefresh: () => void;
@@ -96,7 +95,10 @@ export const DigestRoute: React.FC<DigestRouteProps> = ({ onRefresh }) => {
     setSelectedDate(d.toISOString().split('T')[0]);
   };
 
-  // Manual Trigger: "Tạo Tổng Hợp" with client fallback if serverless returns error
+  // Manual Trigger: "Tạo Tổng Hợp" via the Vercel Serverless API ONLY.
+  // This NEVER calls Gemini directly from the browser -- the Gemini API key must
+  // stay server-side. If the serverless call fails, the failure is thrown and
+  // surfaced in the toast instead of faking a successful digest.
   const handleGenerateDigest = async () => {
     setGenerating(true);
     setToast({
@@ -106,93 +108,18 @@ export const DigestRoute: React.FC<DigestRouteProps> = ({ onRefresh }) => {
     });
 
     try {
-      let digestPayload: DailyDigest | null = null;
+      const response = await fetch(`/api/generate-digest?date=${selectedDate}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ date: selectedDate })
+      });
 
-      // 1. Try Vercel Serverless API first
-      try {
-        const response = await fetch(`/api/generate-digest?date=${selectedDate}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ date: selectedDate })
-        });
-
-        if (response.ok) {
-          digestPayload = await response.json();
-        }
-      } catch (e) {
-        console.warn('Serverless API fetch error, switching to direct Gemini client:', e);
+      if (!response.ok) {
+        const errBody = await response.text().catch(() => '');
+        throw new Error(`/api/generate-digest returned ${response.status}: ${errBody}`);
       }
 
-      // 2. Client-side Gemini fallback if serverless returned error or running on localhost
-      if (!digestPayload) {
-        const apiKey = import.meta.env.VITE_GEMINI_API_KEY || (process as any)?.env?.GEMINI_API_KEY;
-
-        const startIso = `${selectedDate}T00:00:00.000Z`;
-        const endIso = `${selectedDate}T23:59:59.999Z`;
-
-        const { data: dayEntries } = await supabase
-          .from('diary_entries')
-          .select('*')
-          .gte('created_at', startIso)
-          .lte('created_at', endIso);
-
-        const count = dayEntries ? dayEntries.length : 0;
-
-        if (apiKey && count > 0) {
-          const genAI = new GoogleGenerativeAI(apiKey);
-          const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
-
-          let promptContent = `Danh sách nhật ký công trình ngày ${selectedDate}:\n`;
-          dayEntries?.forEach((e: any, idx: number) => {
-            promptContent += `- Nhật ký #${idx + 1}: ${e.transcription || e.extracted_data?.category || 'Ghi nhận'}\n`;
-          });
-
-          const res = await model.generateContent(`Bạn là chuyên gia xây dựng. Phân tích danh sách nhật ký sau và trả về JSON:
-${promptContent}
-JSON:
-{
-  "agenda_text": "Danh sách việc cần chú ý cho ngày mai (gạch đầu dòng)",
-  "summary_text": "Tóm tắt tổng quan tiến độ hôm nay"
-}`);
-
-          const raw = res.response.text();
-          let agendaText = 'Đã cập nhật các việc cần chú ý cho ngày mai.';
-          let summaryText = 'Đã hoàn thành các công việc ghi nhận trong ngày.';
-
-          try {
-            const match = raw.match(/\{[\s\S]*\}/);
-            if (match) {
-              const p = JSON.parse(match[0]);
-              agendaText = p.agenda_text || agendaText;
-              summaryText = p.summary_text || summaryText;
-            }
-          } catch (e) {}
-
-          digestPayload = {
-            id: `digest_${Date.now()}`,
-            digest_date: selectedDate,
-            agenda_text: agendaText,
-            summary_text: summaryText,
-            entries_count: count,
-            generated_at: new Date().toISOString()
-          };
-
-          // Save to Supabase daily_digests table
-          await supabase.from('daily_digests').upsert(digestPayload, { onConflict: 'digest_date' });
-        } else {
-          digestPayload = {
-            id: `digest_${Date.now()}`,
-            digest_date: selectedDate,
-            agenda_text: flaggedEntries.length > 0
-              ? flaggedEntries.map((f, i) => `${i + 1}. ${f.flag.summary_bullet || f.entry.transcription}`).join('\n')
-              : 'Chưa có mục cần chú ý cho ngày này.',
-            summary_text: count > 0 ? `Đã hoàn thành ${count} ghi nhận trong ngày.` : 'Không có ghi nhận nào trong ngày.',
-            entries_count: count,
-            generated_at: new Date().toISOString()
-          };
-          await supabase.from('daily_digests').upsert(digestPayload, { onConflict: 'digest_date' });
-        }
-      }
+      const digestPayload: DailyDigest = await response.json();
 
       setDigest(digestPayload);
       setToast({
