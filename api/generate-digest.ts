@@ -14,35 +14,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
   try {
-    // Determine date parameter (YYYY-MM-DD), default to today in UTC+7 / local date
     let targetDate = (req.query.date as string) || (req.body && req.body.date);
     if (!targetDate) {
       const now = new Date();
       targetDate = now.toISOString().split('T')[0];
     }
 
-    // Start & End timestamp for date query
     const startIso = `${targetDate}T00:00:00.000Z`;
     const endIso = `${targetDate}T23:59:59.999Z`;
 
-    // 1. Fetch diary entries for targetDate
+    // 1. Fetch diary entries for targetDate (flat select to avoid schema cache join issues)
     const { data: entries, error: fetchErr } = await supabase
       .from('diary_entries')
-      .select(`
-        id,
-        created_at,
-        transcription,
-        extracted_data,
-        photo_url,
-        voice_url,
-        status,
-        entry_flags (
-          id,
-          summary_bullet,
-          is_flagged,
-          flag_reason
-        )
-      `)
+      .select('*')
       .gte('created_at', startIso)
       .lte('created_at', endIso)
       .order('created_at', { ascending: true });
@@ -54,7 +38,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const count = entries ? entries.length : 0;
 
     if (count === 0) {
-      // Return early with empty digest notice if no entries exist
       const emptyDigest = {
         digest_date: targetDate,
         agenda_text: 'Chưa có mục cần chú ý cho ngày này.',
@@ -66,11 +49,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(200).json(emptyDigest);
     }
 
-    // 2. Build Gemini prompt: all summary_bullets + full transcriptions for flagged entries
+    // 2. Fetch flags for targetDate
+    const { data: flags } = await supabase.from('entry_flags').select('*');
+    const flagsByEntryId: Record<string, any> = {};
+    if (flags) {
+      flags.forEach((f) => {
+        flagsByEntryId[f.entry_id] = f;
+      });
+    }
+
+    // 3. Build Gemini prompt
     let promptContent = `Dưới đây là danh sách tất cả nhật ký công trình trong ngày ${targetDate}:\n\n`;
 
     entries.forEach((e: any, idx: number) => {
-      const flagInfo = Array.isArray(e.entry_flags) && e.entry_flags.length > 0 ? e.entry_flags[0] : null;
+      const flagInfo = flagsByEntryId[e.id];
       const isFlagged = flagInfo?.is_flagged || false;
       const bullet = flagInfo?.summary_bullet || e.extracted_data?.summary_bullet || e.transcription?.substring(0, 100) || 'Ghi nhận công trình';
 
@@ -118,7 +110,6 @@ YÊU CẦU TRẢ VỀ JSON THUẦN TÚY (không kèm markdown):
       console.warn('Failed parsing digest JSON:', e);
     }
 
-    // 3. Write to daily_digests (upsert by digest_date)
     const digestPayload = {
       digest_date: targetDate,
       agenda_text: agendaText,

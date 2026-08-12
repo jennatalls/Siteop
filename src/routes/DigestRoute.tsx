@@ -11,12 +11,12 @@ import {
   ChevronDown,
   ChevronUp,
   Volume2,
-  Clock,
   Layers
 } from 'lucide-react';
 import { DailyDigest, DiaryEntry, EntryFlag } from '../lib/types';
 import { supabase } from '../lib/supabase';
 import { Toast } from '../components/Toast';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
 interface DigestRouteProps {
   onRefresh: () => void;
@@ -40,44 +40,40 @@ export const DigestRoute: React.FC<DigestRouteProps> = ({ onRefresh }) => {
     setLoading(true);
     try {
       // 1. Fetch daily digest row
-      const { data: digestData, error: digestErr } = await supabase
+      const { data: digestData } = await supabase
         .from('daily_digests')
         .select('*')
         .eq('digest_date', dateStr)
         .maybeSingle();
 
-      if (digestErr) {
-        console.warn('Fetch digest error:', digestErr);
-      } else {
-        setDigest(digestData as DailyDigest | null);
-      }
+      setDigest(digestData as DailyDigest | null);
 
-      // 2. Fetch flagged entries for target date
+      // 2. Fetch entries & flags for date using flat queries to avoid relationship joins
       const startIso = `${dateStr}T00:00:00.000Z`;
       const endIso = `${dateStr}T23:59:59.999Z`;
 
-      const { data: entriesData, error: entriesErr } = await supabase
+      const { data: entriesData } = await supabase
         .from('diary_entries')
-        .select(`
-          *,
-          entry_flags (*)
-        `)
+        .select('*')
         .gte('created_at', startIso)
         .lte('created_at', endIso)
         .order('created_at', { ascending: false });
 
-      if (entriesErr) {
-        console.warn('Fetch flagged entries error:', entriesErr);
-      } else if (entriesData) {
-        const flaggedList: Array<{ entry: DiaryEntry; flag: EntryFlag }> = [];
+      const { data: flagsData } = await supabase.from('entry_flags').select('*');
 
+      if (entriesData) {
+        const flagsByEntryId: Record<string, EntryFlag> = {};
+        if (flagsData) {
+          flagsData.forEach((f: any) => {
+            flagsByEntryId[f.entry_id] = f as EntryFlag;
+          });
+        }
+
+        const flaggedList: Array<{ entry: DiaryEntry; flag: EntryFlag }> = [];
         entriesData.forEach((e: any) => {
-          const flags = e.entry_flags;
-          if (Array.isArray(flags) && flags.length > 0) {
-            const flag = flags[0];
-            if (flag.is_flagged) {
-              flaggedList.push({ entry: e as DiaryEntry, flag: flag as EntryFlag });
-            }
+          const flag = flagsByEntryId[e.id];
+          if (flag && flag.is_flagged) {
+            flaggedList.push({ entry: e as DiaryEntry, flag });
           }
         });
 
@@ -94,14 +90,13 @@ export const DigestRoute: React.FC<DigestRouteProps> = ({ onRefresh }) => {
     fetchDigestForDate(selectedDate);
   }, [selectedDate]);
 
-  // Navigate date with arrows
   const changeDateByDays = (days: number) => {
     const d = new Date(selectedDate);
     d.setDate(d.getDate() + days);
     setSelectedDate(d.toISOString().split('T')[0]);
   };
 
-  // Manual Trigger: "Tạo Tổng Hợp"
+  // Manual Trigger: "Tạo Tổng Hợp" with client fallback if serverless returns error
   const handleGenerateDigest = async () => {
     setGenerating(true);
     setToast({
@@ -111,18 +106,95 @@ export const DigestRoute: React.FC<DigestRouteProps> = ({ onRefresh }) => {
     });
 
     try {
-      const response = await fetch(`/api/generate-digest?date=${selectedDate}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ date: selectedDate })
-      });
+      let digestPayload: DailyDigest | null = null;
 
-      if (!response.ok) {
-        throw new Error('Không thể kết nối /api/generate-digest serverless');
+      // 1. Try Vercel Serverless API first
+      try {
+        const response = await fetch(`/api/generate-digest?date=${selectedDate}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ date: selectedDate })
+        });
+
+        if (response.ok) {
+          digestPayload = await response.json();
+        }
+      } catch (e) {
+        console.warn('Serverless API fetch error, switching to direct Gemini client:', e);
       }
 
-      const result = await response.json();
-      setDigest(result);
+      // 2. Client-side Gemini fallback if serverless returned error or running on localhost
+      if (!digestPayload) {
+        const apiKey = import.meta.env.VITE_GEMINI_API_KEY || (process as any)?.env?.GEMINI_API_KEY;
+
+        const startIso = `${selectedDate}T00:00:00.000Z`;
+        const endIso = `${selectedDate}T23:59:59.999Z`;
+
+        const { data: dayEntries } = await supabase
+          .from('diary_entries')
+          .select('*')
+          .gte('created_at', startIso)
+          .lte('created_at', endIso);
+
+        const count = dayEntries ? dayEntries.length : 0;
+
+        if (apiKey && count > 0) {
+          const genAI = new GoogleGenerativeAI(apiKey);
+          const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+
+          let promptContent = `Danh sách nhật ký công trình ngày ${selectedDate}:\n`;
+          dayEntries?.forEach((e: any, idx: number) => {
+            promptContent += `- Nhật ký #${idx + 1}: ${e.transcription || e.extracted_data?.category || 'Ghi nhận'}\n`;
+          });
+
+          const res = await model.generateContent(`Bạn là chuyên gia xây dựng. Phân tích danh sách nhật ký sau và trả về JSON:
+${promptContent}
+JSON:
+{
+  "agenda_text": "Danh sách việc cần chú ý cho ngày mai (gạch đầu dòng)",
+  "summary_text": "Tóm tắt tổng quan tiến độ hôm nay"
+}`);
+
+          const raw = res.response.text();
+          let agendaText = 'Đã cập nhật các việc cần chú ý cho ngày mai.';
+          let summaryText = 'Đã hoàn thành các công việc ghi nhận trong ngày.';
+
+          try {
+            const match = raw.match(/\{[\s\S]*\}/);
+            if (match) {
+              const p = JSON.parse(match[0]);
+              agendaText = p.agenda_text || agendaText;
+              summaryText = p.summary_text || summaryText;
+            }
+          } catch (e) {}
+
+          digestPayload = {
+            id: `digest_${Date.now()}`,
+            digest_date: selectedDate,
+            agenda_text: agendaText,
+            summary_text: summaryText,
+            entries_count: count,
+            generated_at: new Date().toISOString()
+          };
+
+          // Save to Supabase daily_digests table
+          await supabase.from('daily_digests').upsert(digestPayload, { onConflict: 'digest_date' });
+        } else {
+          digestPayload = {
+            id: `digest_${Date.now()}`,
+            digest_date: selectedDate,
+            agenda_text: flaggedEntries.length > 0
+              ? flaggedEntries.map((f, i) => `${i + 1}. ${f.flag.summary_bullet || f.entry.transcription}`).join('\n')
+              : 'Chưa có mục cần chú ý cho ngày này.',
+            summary_text: count > 0 ? `Đã hoàn thành ${count} ghi nhận trong ngày.` : 'Không có ghi nhận nào trong ngày.',
+            entries_count: count,
+            generated_at: new Date().toISOString()
+          };
+          await supabase.from('daily_digests').upsert(digestPayload, { onConflict: 'digest_date' });
+        }
+      }
+
+      setDigest(digestPayload);
       setToast({
         message: 'Tạo tổng hợp báo cáo ngày thành công!',
         type: 'success',
@@ -130,23 +202,11 @@ export const DigestRoute: React.FC<DigestRouteProps> = ({ onRefresh }) => {
       });
       fetchDigestForDate(selectedDate);
     } catch (err: any) {
-      console.warn('Manual digest generation fallback:', err);
+      console.error('Digest generation exception:', err);
       setToast({
-        message: 'Không có API serverless. Đang chạy tổng hợp AI trực tiếp...',
-        type: 'info',
+        message: 'Lỗi khi tạo tổng hợp: ' + (err.message || 'Thử lại'),
+        type: 'error',
         open: true
-      });
-
-      // Fallback local digest calculation
-      setDigest({
-        id: `digest_${Date.now()}`,
-        digest_date: selectedDate,
-        agenda_text: flaggedEntries.length > 0
-          ? flaggedEntries.map((f, i) => `${i + 1}. ${f.flag.summary_bullet || f.entry.transcription}`).join('\n')
-          : 'Không có mục cần chú ý cho ngày này.',
-        summary_text: 'Đã hoàn thành các công việc ghi nhận trong ngày.',
-        entries_count: flaggedEntries.length,
-        generated_at: new Date().toISOString()
       });
     } finally {
       setGenerating(false);
@@ -253,7 +313,7 @@ export const DigestRoute: React.FC<DigestRouteProps> = ({ onRefresh }) => {
             </div>
           </div>
 
-          {/* FLAGGED ENTRIES LIST (Individual Flagged Items below Digest) */}
+          {/* FLAGGED ENTRIES LIST */}
           <div className="glass-card rounded-3xl p-5 border border-slate-700/60 space-y-3 shadow-xl">
             <div className="flex items-center justify-between border-b border-slate-800 pb-2">
               <h3 className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
