@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { createClient } from '@supabase/supabase-js';
-import { GEMINI_MODEL } from './_lib/gemini';
+import { GEMINI_MODEL } from '../src/lib/geminiConfig';
 
 const supabaseUrl = process.env.VITE_SUPABASE_URL || 'https://sdfdnxgxbxxbyofmeyzo.supabase.co';
 const supabaseAnonKey = process.env.VITE_SUPABASE_ANON_KEY || '';

@@ -11,10 +11,10 @@ and `/api/generate-digest` in production on 2026-08-12 when `gemini-1.5-flash`
 started returning `404 Not Found`, silently for days because the client-side
 fallback (see #2) swallowed the error.
 
-The model name lives in **one place**: `api/_lib/gemini.ts` (`GEMINI_MODEL`).
+The model name lives in **one place**: `src/lib/geminiConfig.ts` (`GEMINI_MODEL`).
 All three routes import it. If you need to change the model:
 
-- Change it in `api/_lib/gemini.ts` only.
+- Change it in `src/lib/geminiConfig.ts` only.
 - Do not write a model string literal inline in an `api/*.ts` route again —
   that's how it ended up hardcoded in three separate files last time, and two
   of them got missed when the third was "fixed."
