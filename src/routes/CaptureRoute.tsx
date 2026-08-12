@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { Mic, Square, Play, Pause, Camera, Trash2, Send, RefreshCw, Plus, CheckCircle2 } from 'lucide-react';
+import { Mic, Square, Play, Pause, Camera, Trash2, Send, RefreshCw } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { addToOfflineQueue, blobToBase64, uploadMediaToSupabase } from '../lib/offlineStore';
 import { processAudioWithGemini } from '../lib/geminiFallback';
@@ -43,7 +43,7 @@ export const CaptureRoute: React.FC<CaptureRouteProps> = ({ isOnline, onEntrySav
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // Start Voice Recording
+  // 1. Start Voice Recording
   const startRecording = async () => {
     try {
       audioChunksRef.current = [];
@@ -93,7 +93,7 @@ export const CaptureRoute: React.FC<CaptureRouteProps> = ({ isOnline, onEntrySav
     }
   };
 
-  // Stop Recording
+  // Stop Recording (No auto-save)
   const stopRecording = () => {
     if (mediaRecorderRef.current && isRecording) {
       mediaRecorderRef.current.stop();
@@ -102,7 +102,7 @@ export const CaptureRoute: React.FC<CaptureRouteProps> = ({ isOnline, onEntrySav
     }
   };
 
-  // Handle Photo Select
+  // 2. Handle Photo Select (No auto-save)
   const handlePhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -137,11 +137,11 @@ export const CaptureRoute: React.FC<CaptureRouteProps> = ({ isOnline, onEntrySav
     }
   };
 
-  // Save Entry (Submits voice + optional photo together in 1 action)
+  // 3. Manual Submit Entry (Saves voice + optional photo together in Step 3)
   const handleSubmit = async () => {
     if (!audioBlob && !photoBlob) {
       setToast({
-        message: 'Vui lòng thu âm hoặc chọn 1 bức ảnh trước khi lưu!',
+        message: 'Vui lòng thu âm giọng nói hoặc chọn 1 bức ảnh trước khi lưu!',
         type: 'info',
         open: true
       });
@@ -163,7 +163,7 @@ export const CaptureRoute: React.FC<CaptureRouteProps> = ({ isOnline, onEntrySav
         });
 
         setToast({
-          message: 'Đã lưu offline vào thiết bị (sẽ đồng bộ khi có mạng)',
+          message: 'Đã lưu offline vào thiết bị (sẽ tự đồng bộ khi có mạng)',
           type: 'success',
           open: true
         });
@@ -247,18 +247,21 @@ export const CaptureRoute: React.FC<CaptureRouteProps> = ({ isOnline, onEntrySav
 
       {/* Screen Title */}
       <div className="text-center space-y-1">
-        <h2 className="text-xl font-bold text-slate-100 tracking-tight">Ghi Nhận Nhật Ký</h2>
-        <p className="text-xs text-slate-400">Thu âm giọng nói và đính kèm ảnh công trình hôm nay</p>
+        <h2 className="text-xl font-bold text-slate-100 tracking-tight">Ghi Nhận Nhật Ký Ngày</h2>
+        <p className="text-xs text-slate-400">Thực hiện theo 3 bước bên dưới trong 1 thẻ duy nhất</p>
       </div>
 
-      {/* UNIFIED SINGLE CARD SECTION */}
-      <div className="glass-card rounded-3xl p-6 border border-slate-700/70 shadow-2xl space-y-6">
+      {/* ONE SINGLE UNIFIED CARD CONTAINER FOR ALL 3 STEPS */}
+      <div className="glass-card rounded-3xl p-6 border border-slate-700/80 shadow-2xl space-y-6">
 
-        {/* 1. Voice Recorder Section */}
+        {/* STEP 1: VOICE RECORDING */}
         <div className="space-y-4">
-          <div className="flex items-center justify-between text-xs text-slate-300 font-semibold border-b border-slate-800/80 pb-2">
-            <span className="flex items-center gap-1.5 text-sky-400">
-              <Mic className="w-4 h-4" /> 1. Thu Âm Giọng Nói
+          <div className="flex items-center justify-between text-xs font-bold text-slate-200 border-b border-slate-800 pb-2">
+            <span className="flex items-center gap-2 text-sky-400">
+              <span className="w-5 h-5 rounded-full bg-sky-500/20 text-sky-400 border border-sky-500/30 flex items-center justify-center text-[11px] font-bold">
+                1
+              </span>
+              Thu Âm Giọng Nói
             </span>
             <span className="font-mono text-sky-400 font-bold text-xs bg-sky-500/10 px-2 py-0.5 rounded-full border border-sky-500/20">
               {formatTime(recordingTime)}
@@ -301,7 +304,7 @@ export const CaptureRoute: React.FC<CaptureRouteProps> = ({ isOnline, onEntrySav
                 {isPlayingAudio ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4 ml-0.5" />}
               </button>
               <div className="flex-1 text-left">
-                <p className="text-xs font-semibold text-slate-200">Đã ghi âm giọng nói</p>
+                <p className="text-xs font-semibold text-slate-200">Bản ghi sẵn sàng</p>
                 <p className="text-[10px] text-slate-400">Thời lượng: {formatTime(recordingTime)}</p>
               </div>
               <button
@@ -321,19 +324,14 @@ export const CaptureRoute: React.FC<CaptureRouteProps> = ({ isOnline, onEntrySav
           )}
         </div>
 
-        {/* Divider */}
-        <div className="relative flex items-center justify-center my-2">
-          <div className="w-full border-t border-slate-800"></div>
-          <span className="absolute px-3 py-0.5 bg-slate-900 text-[10px] font-semibold text-slate-400 rounded-full border border-slate-800">
-            KÈM THEO ÁNH (TÙY CHỌN)
-          </span>
-        </div>
-
-        {/* 2. Photo Section */}
-        <div className="space-y-3">
-          <div className="flex items-center justify-between text-xs text-slate-300 font-semibold">
-            <span className="flex items-center gap-1.5 text-amber-400">
-              <Camera className="w-4 h-4" /> 2. Chụp / Đính Kèm Ảnh Công Trình
+        {/* STEP 2: PHOTO CAPTURE / UPLOAD (OPTIONAL) */}
+        <div className="space-y-3 pt-2">
+          <div className="flex items-center justify-between text-xs font-bold text-slate-200 border-b border-slate-800 pb-2">
+            <span className="flex items-center gap-2 text-amber-400">
+              <span className="w-5 h-5 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30 flex items-center justify-center text-[11px] font-bold">
+                2
+              </span>
+              Chụp / Đính Kèm Ảnh (Tùy chọn)
             </span>
           </div>
 
@@ -354,7 +352,7 @@ export const CaptureRoute: React.FC<CaptureRouteProps> = ({ isOnline, onEntrySav
               className="w-full h-24 rounded-2xl border border-dashed border-slate-700 hover:border-amber-400/50 bg-slate-900/40 hover:bg-slate-900/80 flex flex-col items-center justify-center gap-1.5 transition cursor-pointer disabled:opacity-50"
             >
               <Camera className="w-6 h-6 text-amber-400/80" />
-              <span className="text-xs text-slate-400 font-medium">Chạm để đính kèm photo (nếu có)</span>
+              <span className="text-xs text-slate-400 font-medium">Chạm để chọn hoặc chụp ảnh</span>
             </button>
           )}
 
@@ -368,12 +366,20 @@ export const CaptureRoute: React.FC<CaptureRouteProps> = ({ isOnline, onEntrySav
           />
         </div>
 
-        {/* 3. Submit Button Inside the Same Card */}
-        <div className="pt-2">
+        {/* STEP 3: MANUAL SAVE ENTRY BUTTON */}
+        <div className="space-y-2 pt-2 border-t border-slate-800/80">
+          <div className="flex items-center gap-2 text-xs font-bold text-emerald-400 mb-1">
+            <span className="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center text-[11px] font-bold">
+              3
+            </span>
+            Lưu Nhật Ký Ngày
+          </div>
+
           <button
+            type="button"
             onClick={handleSubmit}
             disabled={isSubmitting || (!audioBlob && !photoBlob)}
-            className="w-full py-4 rounded-2xl bg-gradient-to-r from-sky-400 via-sky-500 to-indigo-500 hover:from-sky-300 hover:to-indigo-400 text-slate-950 font-bold text-base shadow-lg shadow-sky-500/25 active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            className="w-full py-4 rounded-2xl bg-gradient-to-r from-sky-400 via-sky-500 to-indigo-500 hover:from-sky-300 hover:to-indigo-400 text-slate-950 font-bold text-base shadow-xl shadow-sky-500/25 active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
             {isSubmitting ? (
               <>
@@ -383,11 +389,12 @@ export const CaptureRoute: React.FC<CaptureRouteProps> = ({ isOnline, onEntrySav
             ) : (
               <>
                 <Send className="w-5 h-5" />
-                <span>Lưu Nhật Ký Ngày</span>
+                <span>Bước 3: Lưu Nhật Ký Ngày</span>
               </>
             )}
           </button>
         </div>
+
       </div>
     </div>
   );
