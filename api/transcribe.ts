@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { createClient } from '@supabase/supabase-js';
+import { GEMINI_MODEL } from './_lib/gemini';
 
 const supabaseUrl = process.env.VITE_SUPABASE_URL || 'https://sdfdnxgxbxxbyofmeyzo.supabase.co';
 const supabaseAnonKey = process.env.VITE_SUPABASE_ANON_KEY || '';
@@ -23,7 +24,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: 'gemini-flash-latest' });
+    const model = genAI.getGenerativeModel({ model: GEMINI_MODEL });
 
     const cleanMimeType = (mimeType || 'audio/mp4').split(';')[0].trim();
 
