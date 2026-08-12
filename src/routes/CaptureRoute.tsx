@@ -1,5 +1,5 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { Mic, Square, Play, Pause, Camera, Trash2, CheckCircle2, AlertCircle, RefreshCw, Sparkles } from 'lucide-react';
+import React, { useState, useRef } from 'react';
+import { Mic, Square, Play, Pause, Camera, Trash2, Send, RefreshCw, Plus, CheckCircle2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { addToOfflineQueue, blobToBase64, uploadMediaToSupabase } from '../lib/offlineStore';
 import { processAudioWithGemini } from '../lib/geminiFallback';
@@ -43,98 +43,6 @@ export const CaptureRoute: React.FC<CaptureRouteProps> = ({ isOnline, onEntrySav
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // Internal Auto-Save Core Engine
-  const saveEntryToSupabase = async (voiceBlobParam?: Blob | null, photoBlobParam?: Blob | null) => {
-    const targetAudio = voiceBlobParam !== undefined ? voiceBlobParam : audioBlob;
-    const targetPhoto = photoBlobParam !== undefined ? photoBlobParam : photoBlob;
-
-    if (!targetAudio && !targetPhoto) return;
-
-    setIsSubmitting(true);
-
-    try {
-      const voiceBase64 = targetAudio ? await blobToBase64(targetAudio) : undefined;
-      const photoBase64 = targetPhoto ? await blobToBase64(targetPhoto) : undefined;
-
-      if (!isOnline) {
-        addToOfflineQueue({
-          voiceBlobBase64: voiceBase64,
-          photoBlobBase64: photoBase64,
-          audioMimeType: targetAudio?.type,
-          photoMimeType: targetPhoto?.type
-        });
-
-        setToast({
-          message: '⚡ Tự động lưu offline vào thiết bị (sẽ đồng bộ khi có mạng)',
-          type: 'success',
-          open: true
-        });
-      } else {
-        let voiceUrl: string | null = null;
-        let photoUrl: string | null = null;
-
-        if (targetAudio) {
-          voiceUrl = await uploadMediaToSupabase(targetAudio, 'voice-memos', `voice_${Date.now()}.mp4`);
-        }
-
-        if (targetPhoto) {
-          photoUrl = await uploadMediaToSupabase(targetPhoto, 'photos', `photo_${Date.now()}.jpg`);
-        }
-
-        const { data: userData } = await supabase.auth.getUser();
-
-        const { data: newEntry, error } = await supabase
-          .from('diary_entries')
-          .insert({
-            created_by: userData?.user?.id || null,
-            voice_url: voiceUrl,
-            photo_url: photoUrl,
-            status: 'draft',
-            submitted_at: new Date().toISOString()
-          })
-          .select()
-          .single();
-
-        if (error) {
-          console.warn('Supabase insert error, using offline fallback:', error);
-          addToOfflineQueue({
-            voiceBlobBase64: voiceBase64,
-            photoBlobBase64: photoBase64,
-            audioMimeType: targetAudio?.type,
-            photoMimeType: targetPhoto?.type
-          });
-          setToast({
-            message: '⚡ Đã lưu offline thành công',
-            type: 'info',
-            open: true
-          });
-        } else {
-          setToast({
-            message: '⚡ Tự động lưu nhật ký thành công!',
-            type: 'success',
-            open: true
-          });
-
-          // Trigger background AI transcription & extraction (Vercel API + Local fallback)
-          if (newEntry && voiceBase64) {
-            processAudioWithGemini(newEntry.id, voiceBase64, targetAudio?.type);
-          }
-        }
-      }
-
-      onEntrySaved();
-    } catch (err: any) {
-      console.error('Auto save error:', err);
-      setToast({
-        message: 'Lỗi tự động lưu: ' + (err.message || 'Thử lại'),
-        type: 'error',
-        open: true
-      });
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
   // Start Voice Recording
   const startRecording = async () => {
     try {
@@ -159,16 +67,13 @@ export const CaptureRoute: React.FC<CaptureRouteProps> = ({ isOnline, onEntrySav
         }
       };
 
-      mediaRecorder.onstop = async () => {
+      mediaRecorder.onstop = () => {
         const finalBlob = new Blob(audioChunksRef.current, { type: mimeType });
         setAudioBlob(finalBlob);
         const url = URL.createObjectURL(finalBlob);
         setAudioUrl(url);
 
         stream.getTracks().forEach((track) => track.stop());
-
-        // AUTO-SAVE IMMEDIATELY UPON RECORDING STOP!
-        await saveEntryToSupabase(finalBlob, photoBlob);
       };
 
       mediaRecorder.start(200);
@@ -188,7 +93,7 @@ export const CaptureRoute: React.FC<CaptureRouteProps> = ({ isOnline, onEntrySav
     }
   };
 
-  // Stop Recording & Trigger Auto-Save
+  // Stop Recording
   const stopRecording = () => {
     if (mediaRecorderRef.current && isRecording) {
       mediaRecorderRef.current.stop();
@@ -197,16 +102,13 @@ export const CaptureRoute: React.FC<CaptureRouteProps> = ({ isOnline, onEntrySav
     }
   };
 
-  // Photo Select & Auto-Save
-  const handlePhotoSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Handle Photo Select
+  const handlePhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       setPhotoBlob(file);
       const url = URL.createObjectURL(file);
       setPhotoPreviewUrl(url);
-
-      // AUTO-SAVE IMMEDIATELY UPON PHOTO SELECTION!
-      await saveEntryToSupabase(audioBlob, file);
     }
   };
 
@@ -235,8 +137,107 @@ export const CaptureRoute: React.FC<CaptureRouteProps> = ({ isOnline, onEntrySav
     }
   };
 
+  // Save Entry (Submits voice + optional photo together in 1 action)
+  const handleSubmit = async () => {
+    if (!audioBlob && !photoBlob) {
+      setToast({
+        message: 'Vui lòng thu âm hoặc chọn 1 bức ảnh trước khi lưu!',
+        type: 'info',
+        open: true
+      });
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    try {
+      const voiceBase64 = audioBlob ? await blobToBase64(audioBlob) : undefined;
+      const photoBase64 = photoBlob ? await blobToBase64(photoBlob) : undefined;
+
+      if (!isOnline) {
+        addToOfflineQueue({
+          voiceBlobBase64: voiceBase64,
+          photoBlobBase64: photoBase64,
+          audioMimeType: audioBlob?.type,
+          photoMimeType: photoBlob?.type
+        });
+
+        setToast({
+          message: 'Đã lưu offline vào thiết bị (sẽ đồng bộ khi có mạng)',
+          type: 'success',
+          open: true
+        });
+      } else {
+        let voiceUrl: string | null = null;
+        let photoUrl: string | null = null;
+
+        if (audioBlob) {
+          voiceUrl = await uploadMediaToSupabase(audioBlob, 'voice-memos', `voice_${Date.now()}.mp4`);
+        }
+
+        if (photoBlob) {
+          photoUrl = await uploadMediaToSupabase(photoBlob, 'photos', `photo_${Date.now()}.jpg`);
+        }
+
+        const { data: userData } = await supabase.auth.getUser();
+
+        const { data: newEntry, error } = await supabase
+          .from('diary_entries')
+          .insert({
+            created_by: userData?.user?.id || null,
+            voice_url: voiceUrl,
+            photo_url: photoUrl,
+            status: 'draft',
+            submitted_at: new Date().toISOString()
+          })
+          .select()
+          .single();
+
+        if (error) {
+          console.warn('Supabase insert warning, saving offline:', error);
+          addToOfflineQueue({
+            voiceBlobBase64: voiceBase64,
+            photoBlobBase64: photoBase64,
+            audioMimeType: audioBlob?.type,
+            photoMimeType: photoBlob?.type
+          });
+          setToast({
+            message: 'Đã lưu offline thành công',
+            type: 'info',
+            open: true
+          });
+        } else {
+          setToast({
+            message: 'Saved! Đã lưu nhật ký thành công.',
+            type: 'success',
+            open: true
+          });
+
+          // Trigger AI transcription & extraction
+          if (newEntry && voiceBase64) {
+            processAudioWithGemini(newEntry.id, voiceBase64, audioBlob?.type);
+          }
+        }
+      }
+
+      // Reset Form for next entry
+      clearAudio();
+      clearPhoto();
+      onEntrySaved();
+    } catch (err: any) {
+      console.error('Submit error:', err);
+      setToast({
+        message: 'Lỗi khi lưu: ' + (err.message || 'Thử lại'),
+        type: 'error',
+        open: true
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   return (
-    <div className="w-full max-w-md mx-auto px-4 py-4 pb-28 space-y-6">
+    <div className="w-full max-w-md mx-auto px-4 py-4 pb-28 space-y-4">
       <Toast
         message={toast.message}
         type={toast.type}
@@ -246,127 +247,147 @@ export const CaptureRoute: React.FC<CaptureRouteProps> = ({ isOnline, onEntrySav
 
       {/* Screen Title */}
       <div className="text-center space-y-1">
-        <h2 className="text-xl font-bold text-slate-100 tracking-tight flex items-center justify-center gap-1.5">
-          <span>Ghi Nhận Nhật Ký</span>
-          <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
-            ⚡ Tự Động Lưu
-          </span>
-        </h2>
-        <p className="text-xs text-slate-400">Chạm thu âm hoặc chụp ảnh — Tự động lưu tức thì</p>
+        <h2 className="text-xl font-bold text-slate-100 tracking-tight">Ghi Nhận Nhật Ký</h2>
+        <p className="text-xs text-slate-400">Thu âm giọng nói và đính kèm ảnh công trình hôm nay</p>
       </div>
 
-      {/* Voice Recorder Card */}
-      <div className="glass-card rounded-3xl p-6 text-center space-y-5 border border-slate-700/60 shadow-xl relative overflow-hidden">
-        <div className="flex items-center justify-between text-xs text-slate-400 font-medium px-1">
-          <span className="flex items-center gap-1.5">
-            <Mic className="w-4 h-4 text-sky-400" /> Ghi Âm Giọng Nói
-          </span>
-          <span className="font-mono text-sky-400 font-bold text-sm">{formatTime(recordingTime)}</span>
-        </div>
+      {/* UNIFIED SINGLE CARD SECTION */}
+      <div className="glass-card rounded-3xl p-6 border border-slate-700/70 shadow-2xl space-y-6">
 
-        {/* Big Record Button */}
-        <div className="flex items-center justify-center py-4">
-          {!isRecording ? (
-            <button
-              type="button"
-              onClick={startRecording}
-              disabled={isSubmitting}
-              className="group relative w-24 h-24 rounded-full bg-gradient-to-tr from-sky-500 to-indigo-600 p-1 flex items-center justify-center shadow-2xl shadow-sky-500/30 hover:scale-105 active:scale-95 transition-all disabled:opacity-50"
-            >
-              <div className="w-full h-full rounded-full bg-slate-950 flex items-center justify-center group-hover:bg-slate-900 transition">
-                <Mic className="w-10 h-10 text-sky-400 group-hover:text-sky-300" />
+        {/* 1. Voice Recorder Section */}
+        <div className="space-y-4">
+          <div className="flex items-center justify-between text-xs text-slate-300 font-semibold border-b border-slate-800/80 pb-2">
+            <span className="flex items-center gap-1.5 text-sky-400">
+              <Mic className="w-4 h-4" /> 1. Thu Âm Giọng Nói
+            </span>
+            <span className="font-mono text-sky-400 font-bold text-xs bg-sky-500/10 px-2 py-0.5 rounded-full border border-sky-500/20">
+              {formatTime(recordingTime)}
+            </span>
+          </div>
+
+          <div className="flex flex-col items-center justify-center py-2">
+            {!isRecording ? (
+              <button
+                type="button"
+                onClick={startRecording}
+                disabled={isSubmitting}
+                className="group relative w-22 h-22 rounded-full bg-gradient-to-tr from-sky-500 to-indigo-600 p-1 flex items-center justify-center shadow-xl shadow-sky-500/25 hover:scale-105 active:scale-95 transition-all disabled:opacity-50"
+              >
+                <div className="w-full h-full rounded-full bg-slate-950 flex items-center justify-center group-hover:bg-slate-900 transition">
+                  <Mic className="w-9 h-9 text-sky-400 group-hover:text-sky-300" />
+                </div>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={stopRecording}
+                className="relative w-22 h-22 rounded-full bg-rose-500 p-1 flex items-center justify-center active-pulse active:scale-95 transition-all"
+              >
+                <div className="w-full h-full rounded-full bg-slate-950 flex flex-col items-center justify-center gap-1">
+                  <Square className="w-7 h-7 text-rose-500 fill-rose-500" />
+                  <span className="text-[10px] font-bold text-rose-400 tracking-wider">DỪNG THU</span>
+                </div>
+              </button>
+            )}
+          </div>
+
+          {/* Audio Player Preview */}
+          {audioUrl && !isRecording && (
+            <div className="p-3 rounded-2xl bg-slate-900/90 border border-slate-700/80 flex items-center justify-between gap-3">
+              <button
+                onClick={togglePlayAudio}
+                className="w-9 h-9 rounded-xl bg-sky-500/20 text-sky-400 hover:bg-sky-500/30 flex items-center justify-center shrink-0"
+              >
+                {isPlayingAudio ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4 ml-0.5" />}
+              </button>
+              <div className="flex-1 text-left">
+                <p className="text-xs font-semibold text-slate-200">Đã ghi âm giọng nói</p>
+                <p className="text-[10px] text-slate-400">Thời lượng: {formatTime(recordingTime)}</p>
               </div>
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={stopRecording}
-              className="relative w-24 h-24 rounded-full bg-rose-500 p-1 flex items-center justify-center active-pulse active:scale-95 transition-all"
-            >
-              <div className="w-full h-full rounded-full bg-slate-950 flex flex-col items-center justify-center gap-1">
-                <Square className="w-8 h-8 text-rose-500 fill-rose-500" />
-                <span className="text-[10px] font-bold text-rose-400 tracking-wider">DỪNG & LƯU</span>
-              </div>
-            </button>
+              <button
+                onClick={clearAudio}
+                className="p-1.5 text-slate-400 hover:text-rose-400 rounded-lg hover:bg-slate-800"
+                title="Xóa ghi âm"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+              <audio
+                ref={audioPlayerRef}
+                src={audioUrl}
+                onEnded={() => setIsPlayingAudio(false)}
+                className="hidden"
+              />
+            </div>
           )}
         </div>
 
-        {/* Status Indicator */}
-        {isSubmitting && (
-          <div className="flex items-center justify-center gap-2 text-xs text-sky-400 font-semibold animate-pulse">
-            <RefreshCw className="w-4 h-4 animate-spin" />
-            <span>Đang tự động lưu nhật ký...</span>
-          </div>
-        )}
-
-        {/* Audio Player Preview */}
-        {audioUrl && !isRecording && (
-          <div className="p-3 rounded-2xl bg-slate-900/90 border border-slate-700 flex items-center justify-between gap-3">
-            <button
-              onClick={togglePlayAudio}
-              className="w-10 h-10 rounded-xl bg-sky-500/20 text-sky-400 hover:bg-sky-500/30 flex items-center justify-center shrink-0"
-            >
-              {isPlayingAudio ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5 ml-0.5" />}
-            </button>
-            <div className="flex-1 text-left">
-              <p className="text-xs font-semibold text-slate-200">Ghi âm vừa tự động lưu</p>
-              <p className="text-[10px] text-slate-400">Thời lượng: {formatTime(recordingTime)}</p>
-            </div>
-            <button
-              onClick={clearAudio}
-              className="p-2 text-slate-400 hover:text-rose-400 rounded-lg hover:bg-slate-800"
-              title="Xóa bản ghi"
-            >
-              <Trash2 className="w-4 h-4" />
-            </button>
-            <audio
-              ref={audioPlayerRef}
-              src={audioUrl}
-              onEnded={() => setIsPlayingAudio(false)}
-              className="hidden"
-            />
-          </div>
-        )}
-      </div>
-
-      {/* Photo Capture Card */}
-      <div className="glass-card rounded-3xl p-5 space-y-4 border border-slate-700/60 shadow-xl">
-        <div className="flex items-center justify-between text-xs text-slate-400 font-medium">
-          <span className="flex items-center gap-1.5">
-            <Camera className="w-4 h-4 text-amber-400" /> Chụp / Chọn Ảnh Công Trình
+        {/* Divider */}
+        <div className="relative flex items-center justify-center my-2">
+          <div className="w-full border-t border-slate-800"></div>
+          <span className="absolute px-3 py-0.5 bg-slate-900 text-[10px] font-semibold text-slate-400 rounded-full border border-slate-800">
+            KÈM THEO ÁNH (TÙY CHỌN)
           </span>
-          <span className="text-[10px] text-emerald-400 font-semibold">Tự động lưu sau khi chọn</span>
         </div>
 
-        {photoPreviewUrl ? (
-          <div className="relative rounded-2xl overflow-hidden border border-slate-700 group">
-            <img src={photoPreviewUrl} alt="Ghi nhận công trình" className="w-full h-48 object-cover" />
-            <button
-              onClick={clearPhoto}
-              className="absolute top-3 right-3 p-2 rounded-xl bg-slate-950/80 text-rose-400 hover:bg-rose-500 hover:text-white transition backdrop-blur-md"
-            >
-              <Trash2 className="w-4 h-4" />
-            </button>
+        {/* 2. Photo Section */}
+        <div className="space-y-3">
+          <div className="flex items-center justify-between text-xs text-slate-300 font-semibold">
+            <span className="flex items-center gap-1.5 text-amber-400">
+              <Camera className="w-4 h-4" /> 2. Chụp / Đính Kèm Ảnh Công Trình
+            </span>
           </div>
-        ) : (
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            disabled={isSubmitting}
-            className="w-full h-32 rounded-2xl border-2 border-dashed border-slate-700 hover:border-amber-400/50 bg-slate-900/40 hover:bg-slate-900/80 flex flex-col items-center justify-center gap-2 transition cursor-pointer disabled:opacity-50"
-          >
-            <Camera className="w-8 h-8 text-amber-400/80" />
-            <span className="text-xs text-slate-300 font-medium">Chạm để chụp hoặc chọn ảnh</span>
-          </button>
-        )}
 
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/*"
-          capture="environment"
-          onChange={handlePhotoSelect}
-          className="hidden"
-        />
+          {photoPreviewUrl ? (
+            <div className="relative rounded-2xl overflow-hidden border border-slate-700 group">
+              <img src={photoPreviewUrl} alt="Ảnh đính kèm" className="w-full h-40 object-cover" />
+              <button
+                onClick={clearPhoto}
+                className="absolute top-2.5 right-2.5 p-1.5 rounded-xl bg-slate-950/80 text-rose-400 hover:bg-rose-500 hover:text-white transition backdrop-blur-md"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isSubmitting}
+              className="w-full h-24 rounded-2xl border border-dashed border-slate-700 hover:border-amber-400/50 bg-slate-900/40 hover:bg-slate-900/80 flex flex-col items-center justify-center gap-1.5 transition cursor-pointer disabled:opacity-50"
+            >
+              <Camera className="w-6 h-6 text-amber-400/80" />
+              <span className="text-xs text-slate-400 font-medium">Chạm để đính kèm photo (nếu có)</span>
+            </button>
+          )}
+
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            onChange={handlePhotoSelect}
+            className="hidden"
+          />
+        </div>
+
+        {/* 3. Submit Button Inside the Same Card */}
+        <div className="pt-2">
+          <button
+            onClick={handleSubmit}
+            disabled={isSubmitting || (!audioBlob && !photoBlob)}
+            className="w-full py-4 rounded-2xl bg-gradient-to-r from-sky-400 via-sky-500 to-indigo-500 hover:from-sky-300 hover:to-indigo-400 text-slate-950 font-bold text-base shadow-lg shadow-sky-500/25 active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+          >
+            {isSubmitting ? (
+              <>
+                <RefreshCw className="w-5 h-5 animate-spin" />
+                <span>Đang Lưu Nhật Ký...</span>
+              </>
+            ) : (
+              <>
+                <Send className="w-5 h-5" />
+                <span>Lưu Nhật Ký Ngày</span>
+              </>
+            )}
+          </button>
+        </div>
       </div>
     </div>
   );
