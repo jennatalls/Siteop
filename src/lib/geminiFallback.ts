@@ -1,149 +1,65 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
 import { supabase } from './supabase';
-import { checkTriggerWords } from './vietnamese';
 
 /**
- * Triggers transcription & extraction using Vercel /api route if available,
- * or falls back to direct client-side Gemini AI if running on localhost / dev mode.
+ * Triggers transcription & extraction via the Vercel serverless /api routes ONLY.
+ * This NEVER calls Gemini directly from the browser -- the Gemini API key must
+ * stay server-side. If either serverless call fails, the failure is written back
+ * to the entry (status = 'error') so it is visible in /diary and /digest instead
+ * of silently disappearing.
  */
 export async function processAudioWithGemini(
-  entryId: string,
-  audioBase64: string,
-  rawMimeType: string = 'audio/mp4',
-  customApiKey?: string
-): Promise<{ text?: string; extracted_data?: any }> {
-  // Strip MIME type parameters like ';codecs=opus' -> 'audio/webm' or 'audio/mp4'
-  const mimeType = (rawMimeType || 'audio/mp4').split(';')[0].trim();
+    entryId: string,
+    audioBase64: string,
+    rawMimeType: string = 'audio/mp4'
+  ): Promise<{ text?: string; extracted_data?: any; error?: string }> {
+    const mimeType = (rawMimeType || 'audio/mp4').split(';')[0].trim();
 
   const cleanBase64 = audioBase64.includes(';base64,')
-    ? audioBase64.split(';base64,')[1]
-    : audioBase64;
-
-  // 1. Try Vercel Serverless API Route first
-  try {
-    const apiRes = await fetch('/api/transcribe', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ audioBase64: cleanBase64, mimeType, entryId })
-    });
-
-    if (apiRes.ok) {
-      const data = await apiRes.json();
-      if (data.text) {
-        // Trigger extraction API
-        fetch('/api/extract', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ transcription: data.text, entryId })
-        }).catch((e) => console.warn('Extract API call error:', e));
-
-        return { text: data.text };
-      }
-    }
-  } catch (err) {
-    console.warn('Vercel /api/transcribe serverless route unavailable, checking Gemini key:', err);
-  }
-
-  // 2. Client-side Fallback (for localhost or direct API key execution)
-  const apiKey =
-    customApiKey ||
-    import.meta.env.VITE_GEMINI_API_KEY ||
-    (import.meta.env as any).GEMINI_API_KEY ||
-    (process as any)?.env?.GEMINI_API_KEY;
-
-  if (!apiKey) {
-    console.warn(
-      'Gemini processing skipped: No VITE_GEMINI_API_KEY found in local environment or Vercel serverless endpoint.'
-    );
-    return {};
-  }
+      ? audioBase64.split(';base64,')[1]
+        : audioBase64;
 
   try {
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+        const transcribeRes = await fetch('/api/transcribe', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ audioBase64: cleanBase64, mimeType, entryId })
+        });
 
-    // Step A: Transcribe Audio
-    const transResult = await model.generateContent([
-      {
-        inlineData: {
-          mimeType,
-          data: cleanBase64
-        }
-      },
-      {
-        text: `Bạn là trợ lý ảo ghi nhận nhật ký công trình bằng tiếng Việt. Hãy nghe đoạn âm thanh này và chuyển thành văn bản tiếng Việt đầy đủ, chính xác. Không thêm nhận xét.`
+      if (!transcribeRes.ok) {
+              const errBody = await transcribeRes.text().catch(() => '');
+              throw new Error(`/api/transcribe returned ${transcribeRes.status}: ${errBody}`);
       }
-    ]);
 
-    let transcriptionText = transResult.response.text().trim();
-    transcriptionText = transcriptionText.replace(/^```[a-z]*\n?/i, '').replace(/\n?```$/i, '').trim();
+      const transcribeData = await transcribeRes.json();
+        const transcriptionText = transcribeData.text;
 
-    // Step B: Extract Construction Data
-    const extractPrompt = `Bạn là chuyên gia xây dựng. Phân tích đoạn nhật ký sau và trích xuất JSON:
-"${transcriptionText}"
-JSON Schema:
-{
-  "category": "Ép cọc / Bê tông / Thợ nề / Xây tô / Điện nước / Vật tư / Khác",
-  "materials": [{ "item": "Tên vật tư", "quantity": "Số lượng", "unit": "Đơn vị" }],
-  "labor": [{ "role": "Vị trí thợ", "count": 1, "hours": "8h", "note": "Công việc" }],
-  "confidence_score": 0.95,
-  "summary_bullet": "Tóm tắt 1 câu ngắn gọn về nhật ký",
-  "is_flagged": false
-}`;
+      if (!transcriptionText) {
+              throw new Error('/api/transcribe returned no text');
+      }
 
-    const extractResult = await model.generateContent(extractPrompt);
-    const extractRaw = extractResult.response.text();
-    let extractedData = {
-      category: 'Công trình',
-      materials: [],
-      labor: [],
-      confidence_score: 0.9,
-      summary_bullet: transcriptionText.substring(0, 80),
-      is_flagged: false
-    };
+      const extractRes = await fetch('/api/extract', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ transcription: transcriptionText, entryId })
+      });
 
-    try {
-      const match = extractRaw.match(/\{[\s\S]*\}/);
-      if (match) extractedData = JSON.parse(match[0]);
-    } catch (e) {
-      console.warn('Failed parsing extracted JSON:', e);
-    }
+      if (!extractRes.ok) {
+              const errBody = await extractRes.text().catch(() => '');
+              throw new Error(`/api/extract returned ${extractRes.status}: ${errBody}`);
+      }
 
-    // Deterministic trigger word regex check (Part 2)
-    const triggerCheck = checkTriggerWords(transcriptionText);
-    let finalIsFlagged = false;
-    let finalFlagReason: string | null = null;
+      const extractedData = await extractRes.json();
 
-    if (triggerCheck.isFlagged) {
-      finalIsFlagged = true;
-      finalFlagReason = triggerCheck.matchedReason;
-    } else if (extractedData.is_flagged) {
-      finalIsFlagged = true;
-      finalFlagReason = 'gemini_judgment';
-    }
-
-    // Save transcription & extracted data to diary_entries
-    await supabase
-      .from('diary_entries')
-      .update({
-        transcription: transcriptionText,
-        extracted_data: extractedData
-      })
-      .eq('id', entryId);
-
-    // Save row to entry_flags table (Part 2)
-    const summaryBulletText = extractedData.summary_bullet || transcriptionText.substring(0, 100);
-
-    await supabase.from('entry_flags').insert({
-      entry_id: entryId,
-      summary_bullet: summaryBulletText,
-      is_flagged: finalIsFlagged,
-      flag_reason: finalFlagReason
-    });
-
-    return { text: transcriptionText, extracted_data: extractedData };
+      return { text: transcriptionText, extracted_data: extractedData };
   } catch (err: any) {
-    console.error('Gemini audio processing exception:', err);
-    return {};
+        console.error('processAudioWithGemini failed:', err);
+
+      // Surface the failure on the entry itself instead of leaving it silently blank.
+      await supabase
+          .from('diary_entries')
+          .update({ status: 'error' })
+          .eq('id', entryId);
+
+      return { error: err.message || 'Unknown error calling /api/transcribe or /api/extract' };
   }
 }
