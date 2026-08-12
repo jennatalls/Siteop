@@ -14,6 +14,8 @@ export interface ExtractedData {
   }>;
   confidence_score: number; // 0.0 - 1.0
   summary_vi?: string;
+  summary_bullet?: string;
+  is_flagged?: boolean;
 }
 
 export type EntryStatus = 'draft' | 'filed' | 'archived';
@@ -28,8 +30,27 @@ export interface DiaryEntry {
   extracted_data?: ExtractedData | null;
   status: EntryStatus;
   submitted_at?: string | null;
-  // Local transient fields
+  // Transient/Joined fields
   is_pending_sync?: boolean;
+  entry_flag?: EntryFlag | null;
+}
+
+export interface EntryFlag {
+  id: string;
+  entry_id: string;
+  summary_bullet: string;
+  is_flagged: boolean;
+  flag_reason?: string | null;
+  created_at: string;
+}
+
+export interface DailyDigest {
+  id: string;
+  digest_date: string; // YYYY-MM-DD
+  agenda_text: string;
+  summary_text: string;
+  entries_count: number;
+  generated_at: string;
 }
 
 export interface SyncLog {

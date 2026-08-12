@@ -3,6 +3,7 @@ import { Navbar } from './components/Navbar';
 import { AuthModal } from './components/AuthModal';
 import { CaptureRoute } from './routes/CaptureRoute';
 import { DiaryRoute } from './routes/DiaryRoute';
+import { DigestRoute } from './routes/DigestRoute';
 import { SyncRoute } from './routes/SyncRoute';
 import { DiaryEntry } from './lib/types';
 import { supabase } from './lib/supabase';
@@ -10,7 +11,7 @@ import { getOfflineQueue, processOfflineQueue } from './lib/offlineStore';
 import { User } from '@supabase/supabase-js';
 
 export function App() {
-  const [currentRoute, setCurrentRoute] = useState<'capture' | 'diary' | 'sync'>('capture');
+  const [currentRoute, setCurrentRoute] = useState<'capture' | 'diary' | 'digest' | 'sync'>('capture');
   const [isOnline, setIsOnline] = useState<boolean>(navigator.onLine);
   const [offlineCount, setOfflineCount] = useState<number>(0);
   const [entries, setEntries] = useState<DiaryEntry[]>([]);
@@ -21,7 +22,6 @@ export function App() {
   useEffect(() => {
     const handleOnline = () => {
       setIsOnline(true);
-      // Auto drain offline queue when coming back online
       processOfflineQueue().then(() => {
         updateOfflineCount();
         fetchEntries();
@@ -43,13 +43,11 @@ export function App() {
     };
   }, []);
 
-  // Update offline queue count
   const updateOfflineCount = () => {
     const queue = getOfflineQueue();
     setOfflineCount(queue.length);
   };
 
-  // Auth State change listener
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
       setUser(data.user ?? null);
@@ -64,12 +62,14 @@ export function App() {
     };
   }, []);
 
-  // Fetch Diary Entries from Supabase
   const fetchEntries = async () => {
     try {
       const { data, error } = await supabase
         .from('diary_entries')
-        .select('*')
+        .select(`
+          *,
+          entry_flags (*)
+        `)
         .order('created_at', { ascending: false });
 
       if (error) {
@@ -93,7 +93,7 @@ export function App() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col selection:bg-sky-500 selection:text-slate-950">
-      {/* Top Navbar & Bottom Navigation */}
+      {/* Top Navbar & Bottom Navigation (4 Tabs) */}
       <Navbar
         currentRoute={currentRoute}
         onNavigate={setCurrentRoute}
@@ -122,6 +122,10 @@ export function App() {
             onRefresh={fetchEntries}
             onNavigateToSync={() => setCurrentRoute('sync')}
           />
+        )}
+
+        {currentRoute === 'digest' && (
+          <DigestRoute onRefresh={fetchEntries} />
         )}
 
         {currentRoute === 'sync' && (

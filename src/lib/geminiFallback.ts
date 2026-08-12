@@ -1,5 +1,6 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { supabase } from './supabase';
+import { checkTriggerWords } from './vietnamese';
 
 /**
  * Triggers transcription & extraction using Vercel /api route if available,
@@ -37,7 +38,7 @@ export async function processAudioWithGemini(
       }
     }
   } catch (err) {
-    console.warn('Vercel /api/transcribe not available locally, switching to fallback:', err);
+    console.warn('Vercel /api/transcribe not available locally, switching to client fallback:', err);
   }
 
   // 2. Client-side Fallback (for localhost or direct API key execution)
@@ -61,13 +62,14 @@ export async function processAudioWithGemini(
         }
       },
       {
-        text: `Bạn là trợ lý ghi nhận nhật ký công trình tiếng Việt. Hãy nghe đoạn âm thanh này và chuyển thành văn bản tiếng Việt chính xác.`
+        text: `Bạn là trợ lý ảo ghi nhận nhật ký công trình bằng tiếng Việt. Hãy nghe đoạn âm thanh này và chuyển thành văn bản tiếng Việt chính xác. Không thêm nhận xét.`
       }
     ]);
 
-    const transcriptionText = transResult.response.text().trim();
+    let transcriptionText = transResult.response.text().trim();
+    transcriptionText = transcriptionText.replace(/^```[a-z]*\n?/i, '').replace(/\n?```$/i, '').trim();
 
-    // Step B: Extract Construction Data
+    // Step B: Extract Construction Data (Part 2 fields included)
     const extractPrompt = `Bạn là chuyên gia xây dựng. Phân tích đoạn nhật ký sau và trích xuất JSON:
 "${transcriptionText}"
 JSON Schema:
@@ -75,7 +77,9 @@ JSON Schema:
   "category": "Ép cọc / Bê tông / Thợ nề / Xây tô / Điện nước / Vật tư / Khác",
   "materials": [{ "item": "Tên vật tư", "quantity": "Số lượng", "unit": "Đơn vị" }],
   "labor": [{ "role": "Vị trí thợ", "count": 1, "hours": "8h", "note": "Công việc" }],
-  "confidence_score": 0.95
+  "confidence_score": 0.95,
+  "summary_bullet": "Tóm tắt 1 câu ngắn gọn về nhật ký",
+  "is_flagged": false
 }`;
 
     const extractResult = await model.generateContent(extractPrompt);
@@ -84,7 +88,9 @@ JSON Schema:
       category: 'Công trình',
       materials: [],
       labor: [],
-      confidence_score: 0.9
+      confidence_score: 0.9,
+      summary_bullet: transcriptionText.substring(0, 80),
+      is_flagged: false
     };
 
     try {
@@ -94,7 +100,20 @@ JSON Schema:
       console.warn('Failed parsing extracted JSON:', e);
     }
 
-    // Save transcription & extracted data directly to Supabase table
+    // Deterministic trigger word regex check (Part 2)
+    const triggerCheck = checkTriggerWords(transcriptionText);
+    let finalIsFlagged = false;
+    let finalFlagReason: string | null = null;
+
+    if (triggerCheck.isFlagged) {
+      finalIsFlagged = true;
+      finalFlagReason = triggerCheck.matchedReason;
+    } else if (extractedData.is_flagged) {
+      finalIsFlagged = true;
+      finalFlagReason = 'gemini_judgment';
+    }
+
+    // Save transcription & extracted data to diary_entries
     await supabase
       .from('diary_entries')
       .update({
@@ -102,6 +121,16 @@ JSON Schema:
         extracted_data: extractedData
       })
       .eq('id', entryId);
+
+    // Save row to entry_flags table (Part 2)
+    const summaryBulletText = extractedData.summary_bullet || transcriptionText.substring(0, 100);
+
+    await supabase.from('entry_flags').insert({
+      entry_id: entryId,
+      summary_bullet: summaryBulletText,
+      is_flagged: finalIsFlagged,
+      flag_reason: finalFlagReason
+    });
 
     return { text: transcriptionText, extracted_data: extractedData };
   } catch (err: any) {

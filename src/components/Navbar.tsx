@@ -1,10 +1,10 @@
 import React from 'react';
-import { Mic, BookOpen, RefreshCw, Wifi, WifiOff, LogIn, LogOut, User } from 'lucide-react';
+import { Mic, BookOpen, Sparkles, RefreshCw, Wifi, WifiOff, LogIn, LogOut, User } from 'lucide-react';
 import { User as SupabaseUser } from '@supabase/supabase-js';
 
 interface NavbarProps {
-  currentRoute: 'capture' | 'diary' | 'sync';
-  onNavigate: (route: 'capture' | 'diary' | 'sync') => void;
+  currentRoute: 'capture' | 'diary' | 'digest' | 'sync';
+  onNavigate: (route: 'capture' | 'diary' | 'digest' | 'sync') => void;
   isOnline: boolean;
   offlineCount: number;
   user: SupabaseUser | null;
@@ -77,43 +77,55 @@ export const Navbar: React.FC<NavbarProps> = ({
         </div>
       </header>
 
-      {/* Bottom Floating Navigation (Mobile Native Feel) */}
-      <nav className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 w-[92%] max-w-md glass-panel rounded-2xl p-1.5 border border-slate-700/60 shadow-2xl shadow-slate-950/80">
-        <div className="grid grid-cols-3 gap-1">
+      {/* Bottom Floating Navigation (4 Tabs: Ghi Nhận / Nhật Ký / Tổng Hợp / Đồng Bộ) */}
+      <nav className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 w-[94%] max-w-md glass-panel rounded-2xl p-1.5 border border-slate-700/60 shadow-2xl shadow-slate-950/80">
+        <div className="grid grid-cols-4 gap-1">
           <button
             onClick={() => onNavigate('capture')}
-            className={`flex flex-col items-center justify-center py-2.5 rounded-xl transition-all ${
+            className={`flex flex-col items-center justify-center py-2 rounded-xl transition-all ${
               currentRoute === 'capture'
                 ? 'bg-sky-500/15 text-sky-400 font-semibold shadow-inner border border-sky-500/30'
                 : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
             }`}
           >
-            <Mic className={`w-5 h-5 mb-0.5 ${currentRoute === 'capture' ? 'animate-bounce-short text-sky-400' : ''}`} />
-            <span className="text-xs">Ghi Nhận</span>
+            <Mic className="w-4 h-4 mb-0.5" />
+            <span className="text-[11px]">Ghi Nhận</span>
           </button>
 
           <button
             onClick={() => onNavigate('diary')}
-            className={`flex flex-col items-center justify-center py-2.5 rounded-xl transition-all ${
+            className={`flex flex-col items-center justify-center py-2 rounded-xl transition-all ${
               currentRoute === 'diary'
                 ? 'bg-sky-500/15 text-sky-400 font-semibold shadow-inner border border-sky-500/30'
                 : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
             }`}
           >
-            <BookOpen className="w-5 h-5 mb-0.5" />
-            <span className="text-xs">Nhật Ký</span>
+            <BookOpen className="w-4 h-4 mb-0.5" />
+            <span className="text-[11px]">Nhật Ký</span>
+          </button>
+
+          <button
+            onClick={() => onNavigate('digest')}
+            className={`flex flex-col items-center justify-center py-2 rounded-xl transition-all ${
+              currentRoute === 'digest'
+                ? 'bg-amber-500/15 text-amber-400 font-semibold shadow-inner border border-amber-500/30'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
+            }`}
+          >
+            <Sparkles className="w-4 h-4 mb-0.5" />
+            <span className="text-[11px]">Tổng Hợp</span>
           </button>
 
           <button
             onClick={() => onNavigate('sync')}
-            className={`flex flex-col items-center justify-center py-2.5 rounded-xl transition-all ${
+            className={`flex flex-col items-center justify-center py-2 rounded-xl transition-all ${
               currentRoute === 'sync'
                 ? 'bg-sky-500/15 text-sky-400 font-semibold shadow-inner border border-sky-500/30'
                 : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
             }`}
           >
-            <RefreshCw className="w-5 h-5 mb-0.5" />
-            <span className="text-xs">Đồng Bộ</span>
+            <RefreshCw className="w-4 h-4 mb-0.5" />
+            <span className="text-[11px]">Đồng Bộ</span>
           </button>
         </div>
       </nav>

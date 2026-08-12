@@ -38,40 +38,31 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       },
       {
         text: `Bạn là trợ lý ảo ghi nhận nhật ký công trình xây dựng bằng tiếng Việt. 
-Hãy nghe đoạn âm thanh này và chuyển thành văn bản (transcription) chính xác từng từ tiếng Việt. 
-Nếu có từ ngữ kỹ thuật xây dựng (xi măng, thợ nề, bê tông, cốp pha, giàn giáo, gạch, dầm, đà,...), hãy ghi chính xác.
-Trả về định dạng JSON thuần túy như sau:
-{
-  "text": "Nội dung văn bản ghi âm tiếng Việt đầy đủ...",
-  "confidence_score": 0.95
-}`
+Hãy nghe đoạn âm thanh này và chuyển thành văn bản (transcription) tiếng Việt đầy đủ, chính xác. 
+Không thêm nhận xét, chỉ trả về đúng văn bản ghi âm tiếng Việt.`
       }
     ]);
 
-    const responseText = result.response.text();
-    let parsedData = { text: responseText, confidence_score: 0.9 };
+    let transcriptionText = result.response.text().trim();
+    // Clean up code blocks if present
+    transcriptionText = transcriptionText.replace(/^```[a-z]*\n?/i, '').replace(/\n?```$/i, '').trim();
 
-    try {
-      const jsonMatch = responseText.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        parsedData = JSON.parse(jsonMatch[0]);
-      }
-    } catch (e) {
-      console.warn('Fallback parsing response text for transcription');
-    }
-
-    // Optionally update entry directly in Supabase if entryId provided
+    // Update entry directly in Supabase if entryId provided
     if (entryId && supabaseUrl && supabaseAnonKey) {
       const supabase = createClient(supabaseUrl, supabaseAnonKey);
-      await supabase
+      const { error: updateErr } = await supabase
         .from('diary_entries')
         .update({
-          transcription: parsedData.text
+          transcription: transcriptionText
         })
         .eq('id', entryId);
+
+      if (updateErr) {
+        console.error('Failed writing transcription to Supabase:', updateErr);
+      }
     }
 
-    return res.status(200).json(parsedData);
+    return res.status(200).json({ text: transcriptionText, confidence_score: 0.95 });
   } catch (error: any) {
     console.error('Transcribe API error:', error);
     return res.status(500).json({ error: error.message || 'Transcription failed' });
