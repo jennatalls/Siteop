@@ -25,6 +25,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
+    const cleanMimeType = (mimeType || 'audio/mp4').split(';')[0].trim();
+
     const cleanBase64 = audioBase64.includes(';base64,')
       ? audioBase64.split(';base64,')[1]
       : audioBase64;
@@ -32,7 +34,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const result = await model.generateContent([
       {
         inlineData: {
-          mimeType: mimeType,
+          mimeType: cleanMimeType,
           data: cleanBase64
         }
       },

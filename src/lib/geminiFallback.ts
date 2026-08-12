@@ -9,9 +9,12 @@ import { checkTriggerWords } from './vietnamese';
 export async function processAudioWithGemini(
   entryId: string,
   audioBase64: string,
-  mimeType: string = 'audio/mp4',
+  rawMimeType: string = 'audio/mp4',
   customApiKey?: string
 ): Promise<{ text?: string; extracted_data?: any }> {
+  // Strip MIME type parameters like ';codecs=opus' -> 'audio/webm' or 'audio/mp4'
+  const mimeType = (rawMimeType || 'audio/mp4').split(';')[0].trim();
+
   const cleanBase64 = audioBase64.includes(';base64,')
     ? audioBase64.split(';base64,')[1]
     : audioBase64;
@@ -38,14 +41,20 @@ export async function processAudioWithGemini(
       }
     }
   } catch (err) {
-    console.warn('Vercel /api/transcribe not available locally, switching to client fallback:', err);
+    console.warn('Vercel /api/transcribe serverless route unavailable, checking Gemini key:', err);
   }
 
   // 2. Client-side Fallback (for localhost or direct API key execution)
-  const apiKey = customApiKey || import.meta.env.VITE_GEMINI_API_KEY || (process as any)?.env?.GEMINI_API_KEY;
+  const apiKey =
+    customApiKey ||
+    import.meta.env.VITE_GEMINI_API_KEY ||
+    (import.meta.env as any).GEMINI_API_KEY ||
+    (process as any)?.env?.GEMINI_API_KEY;
 
   if (!apiKey) {
-    console.warn('No GEMINI_API_KEY provided for client-side fallback. On Vercel, server-side API will handle this.');
+    console.warn(
+      'Gemini processing skipped: No VITE_GEMINI_API_KEY found in local environment or Vercel serverless endpoint.'
+    );
     return {};
   }
 
@@ -62,14 +71,14 @@ export async function processAudioWithGemini(
         }
       },
       {
-        text: `Bạn là trợ lý ảo ghi nhận nhật ký công trình bằng tiếng Việt. Hãy nghe đoạn âm thanh này và chuyển thành văn bản tiếng Việt chính xác. Không thêm nhận xét.`
+        text: `Bạn là trợ lý ảo ghi nhận nhật ký công trình bằng tiếng Việt. Hãy nghe đoạn âm thanh này và chuyển thành văn bản tiếng Việt đầy đủ, chính xác. Không thêm nhận xét.`
       }
     ]);
 
     let transcriptionText = transResult.response.text().trim();
     transcriptionText = transcriptionText.replace(/^```[a-z]*\n?/i, '').replace(/\n?```$/i, '').trim();
 
-    // Step B: Extract Construction Data (Part 2 fields included)
+    // Step B: Extract Construction Data
     const extractPrompt = `Bạn là chuyên gia xây dựng. Phân tích đoạn nhật ký sau và trích xuất JSON:
 "${transcriptionText}"
 JSON Schema:
@@ -134,7 +143,7 @@ JSON Schema:
 
     return { text: transcriptionText, extracted_data: extractedData };
   } catch (err: any) {
-    console.error('Direct Gemini processing error:', err);
+    console.error('Gemini audio processing exception:', err);
     return {};
   }
 }
