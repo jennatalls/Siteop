@@ -13,12 +13,15 @@ import {
   Download,
   X,
   Volume2,
-  AlertCircle
+  AlertCircle,
+  RefreshCw
 } from 'lucide-react';
 import { DiaryEntry, EntryStatus } from '../lib/types';
 import { supabase } from '../lib/supabase';
 import { matchVietnameseSearch } from '../lib/vietnamese';
 import { Toast } from '../components/Toast';
+import { processAudioWithGemini } from '../lib/geminiFallback';
+import { blobToBase64 } from '../lib/offlineStore';
 
 interface DiaryRouteProps {
   entries: DiaryEntry[];
@@ -44,6 +47,9 @@ export const DiaryRoute: React.FC<DiaryRouteProps> = ({ entries, onRefresh, onNa
     type: 'success',
     open: false
   });
+
+  // Tracks which entry (by id) currently has a retry-transcription request in flight
+  const [retryingEntryId, setRetryingEntryId] = useState<string | null>(null);
 
   // Categories list extracted dynamically from entries
   const availableCategories = useMemo(() => {
@@ -127,6 +133,74 @@ export const DiaryRoute: React.FC<DiaryRouteProps> = ({ entries, onRefresh, onNa
         type: 'error',
         open: true
       });
+    }
+  };
+
+  // Retry transcription for an entry that has a recording but no transcript
+  // (either explicitly failed, or silently failed before error-status handling
+  // existed). Re-runs the exact same /api/transcribe -> /api/extract pipeline
+  // CaptureRoute uses for new recordings -- no separate backend logic.
+  const retryTranscription = async (entry: DiaryEntry, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    if (!entry.voice_url || retryingEntryId) return;
+
+    setRetryingEntryId(entry.id);
+
+    try {
+      let audioBase64: string;
+      let mimeType = 'audio/mp4';
+
+      if (entry.voice_url.startsWith('data:')) {
+        // Old-style inline recording (base64 stored directly in the DB row)
+        audioBase64 = entry.voice_url;
+        const match = entry.voice_url.match(/^data:([^;]+);base64,/);
+        if (match) mimeType = match[1];
+      } else {
+        // Normal case: a real Supabase Storage URL -- fetch the file back
+        const res = await fetch(entry.voice_url);
+        if (!res.ok) {
+          throw new Error(`Không tải được file ghi âm để thử lại (HTTP ${res.status})`);
+        }
+        const blob = await res.blob();
+        mimeType = blob.type || mimeType;
+        audioBase64 = await blobToBase64(blob);
+      }
+
+      const result = await processAudioWithGemini(entry.id, audioBase64, mimeType);
+
+      if (result.error) {
+        throw new Error(result.error);
+      }
+
+      // Reflect the new transcript immediately if this entry's detail is open,
+      // rather than waiting on the next onRefresh() round-trip.
+      if (activeEntry?.id === entry.id) {
+        setActiveEntry((prev) =>
+          prev
+            ? {
+                ...prev,
+                transcription: result.text ?? prev.transcription,
+                extracted_data: result.extracted_data ?? prev.extracted_data
+              }
+            : null
+        );
+      }
+
+      setToast({
+        message: 'Đã thử lại chuyển văn bản thành công!',
+        type: 'success',
+        open: true
+      });
+
+      onRefresh();
+    } catch (err: any) {
+      setToast({
+        message: 'Lỗi khi thử lại chuyển văn bản: ' + (err.message || 'Vui lòng thử lại sau'),
+        type: 'error',
+        open: true
+      });
+    } finally {
+      setRetryingEntryId(null);
     }
   };
 
@@ -253,6 +327,8 @@ export const DiaryRoute: React.FC<DiaryRouteProps> = ({ entries, onRefresh, onNa
               entry.transcription && entry.transcription.length > 100
                 ? entry.transcription.substring(0, 100) + '...'
                 : entry.transcription || 'Chưa có ghi chép văn bản...';
+            const needsRetry = !!entry.voice_url && !entry.transcription;
+            const isRetrying = retryingEntryId === entry.id;
 
             return (
               <div
@@ -311,6 +387,21 @@ export const DiaryRoute: React.FC<DiaryRouteProps> = ({ entries, onRefresh, onNa
                           {(ext.confidence_score * 100).toFixed(0)}% AI
                         </span>
                       )}
+
+                      {needsRetry && (
+                        <button
+                          onClick={(e) => retryTranscription(entry, e)}
+                          disabled={retryingEntryId !== null}
+                          className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-rose-500/15 text-rose-400 border border-rose-500/30 text-[10px] font-semibold hover:bg-rose-500/25 disabled:opacity-50 transition"
+                        >
+                          {isRetrying ? (
+                            <RefreshCw className="w-3 h-3 animate-spin" />
+                          ) : (
+                            <AlertCircle className="w-3 h-3" />
+                          )}
+                          {isRetrying ? 'Đang thử lại...' : 'Chưa có văn bản — Thử lại'}
+                        </button>
+                      )}
                     </div>
                   </div>
 
@@ -361,7 +452,21 @@ export const DiaryRoute: React.FC<DiaryRouteProps> = ({ entries, onRefresh, onNa
 
             {/* Transcription */}
             <div className="space-y-1">
-              <label className="block text-xs font-semibold text-slate-300">Văn bản ghi chép:</label>
+              <div className="flex items-center justify-between">
+                <label className="block text-xs font-semibold text-slate-300">Văn bản ghi chép:</label>
+                {activeEntry.voice_url && !activeEntry.transcription && (
+                  <button
+                    onClick={(e) => retryTranscription(activeEntry, e)}
+                    disabled={retryingEntryId !== null}
+                    className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-rose-500/15 text-rose-400 border border-rose-500/30 text-[11px] font-semibold hover:bg-rose-500/25 disabled:opacity-50 transition"
+                  >
+                    <RefreshCw
+                      className={`w-3.5 h-3.5 ${retryingEntryId === activeEntry.id ? 'animate-spin' : ''}`}
+                    />
+                    {retryingEntryId === activeEntry.id ? 'Đang thử lại...' : 'Thử Lại Chuyển Văn Bản'}
+                  </button>
+                )}
+              </div>
               <p className="p-3 rounded-2xl bg-slate-900/90 border border-slate-800 text-xs text-slate-200 leading-relaxed whitespace-pre-wrap">
                 {activeEntry.transcription || 'Chưa có ghi chép văn bản.'}
               </p>
