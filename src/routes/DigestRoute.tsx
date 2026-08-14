@@ -7,15 +7,60 @@ import {
   ChevronRight,
   Sparkles,
   RefreshCw,
-  Tag,
-  ChevronDown,
-  ChevronUp,
-  Volume2,
-  Layers
+  ListChecks
 } from 'lucide-react';
-import { DailyDigest, DiaryEntry, EntryFlag } from '../lib/types';
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent
+} from '@dnd-kit/core';
+import { SortableContext, verticalListSortingStrategy, arrayMove } from '@dnd-kit/sortable';
+import { DailyDigest, EntryFlag, TodoItem } from '../lib/types';
 import { supabase } from '../lib/supabase';
 import { Toast } from '../components/Toast';
+import { TodoItemRow } from '../components/TodoItemRow';
+
+// --- Date helpers (local calendar, matching the existing date-input convention in this file) ---
+
+function getMonday(d: Date): Date {
+  const date = new Date(d);
+  const day = date.getDay(); // 0 = Sun ... 6 = Sat
+  const diff = day === 0 ? -6 : 1 - day;
+  date.setDate(date.getDate() + diff);
+  return date;
+}
+
+function toDateStr(d: Date): string {
+  return d.toISOString().split('T')[0];
+}
+
+function getMondayString(d: Date): string {
+  return toDateStr(getMonday(d));
+}
+
+function addDays(dateStr: string, days: number): string {
+  const d = new Date(dateStr);
+  d.setDate(d.getDate() + days);
+  return toDateStr(d);
+}
+
+function formatWeekLabel(weekStartStr: string): string {
+  const start = new Date(weekStartStr);
+  const end = new Date(addDays(weekStartStr, 6));
+  const fmt = (d: Date) => d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' });
+  return `${fmt(start)} - ${fmt(end)}`;
+}
+
+// Sort: incomplete items first (by sort_order), completed items pushed to the bottom
+function sortTodoItems(items: TodoItem[]): TodoItem[] {
+  return [...items].sort((a, b) => {
+    if (a.is_done !== b.is_done) return a.is_done ? 1 : -1;
+    return a.sort_order - b.sort_order;
+  });
+}
 
 interface DigestRouteProps {
   onRefresh: () => void;
@@ -24,21 +69,25 @@ interface DigestRouteProps {
 export const DigestRoute: React.FC<DigestRouteProps> = ({ onRefresh }) => {
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [digest, setDigest] = useState<DailyDigest | null>(null);
-  const [flaggedEntries, setFlaggedEntries] = useState<Array<{ entry: DiaryEntry; flag: EntryFlag }>>([]);
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
-  const [expandedEntryId, setExpandedEntryId] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info'; open: boolean }>({
     message: '',
     type: 'success',
     open: false
   });
 
-  // Fetch Digest & Flagged Entries for selectedDate
+  // Weekly To-Do state
+  const [weekStart, setWeekStart] = useState<string>(() => getMondayString(new Date()));
+  const [todoItems, setTodoItems] = useState<TodoItem[]>([]);
+  const [todoLoading, setTodoLoading] = useState(false);
+
+  const dndSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
+
+  // Fetch the daily digest row for selectedDate
   const fetchDigestForDate = async (dateStr: string) => {
     setLoading(true);
     try {
-      // 1. Fetch daily digest row
       const { data: digestData } = await supabase
         .from('daily_digests')
         .select('*')
@@ -46,38 +95,6 @@ export const DigestRoute: React.FC<DigestRouteProps> = ({ onRefresh }) => {
         .maybeSingle();
 
       setDigest(digestData as DailyDigest | null);
-
-      // 2. Fetch entries & flags for date using flat queries to avoid relationship joins
-      const startIso = `${dateStr}T00:00:00.000Z`;
-      const endIso = `${dateStr}T23:59:59.999Z`;
-
-      const { data: entriesData } = await supabase
-        .from('diary_entries')
-        .select('*')
-        .gte('created_at', startIso)
-        .lte('created_at', endIso)
-        .order('created_at', { ascending: false });
-
-      const { data: flagsData } = await supabase.from('entry_flags').select('*');
-
-      if (entriesData) {
-        const flagsByEntryId: Record<string, EntryFlag> = {};
-        if (flagsData) {
-          flagsData.forEach((f: any) => {
-            flagsByEntryId[f.entry_id] = f as EntryFlag;
-          });
-        }
-
-        const flaggedList: Array<{ entry: DiaryEntry; flag: EntryFlag }> = [];
-        entriesData.forEach((e: any) => {
-          const flag = flagsByEntryId[e.id];
-          if (flag && flag.is_flagged) {
-            flaggedList.push({ entry: e as DiaryEntry, flag });
-          }
-        });
-
-        setFlaggedEntries(flaggedList);
-      }
     } catch (err) {
       console.warn('Digest load exception:', err);
     } finally {
@@ -85,14 +102,161 @@ export const DigestRoute: React.FC<DigestRouteProps> = ({ onRefresh }) => {
     }
   };
 
+  // Fetch this week's to-do items, then auto-populate any newly-flagged
+  // entries that don't have a to-do item yet. Never touches existing rows'
+  // due_date / sort_order / is_done -- only inserts genuinely new ones.
+  const fetchAndPopulateTodos = async (weekStartStr: string) => {
+    setTodoLoading(true);
+    try {
+      const weekEndStr = addDays(weekStartStr, 6);
+      const startIso = `${weekStartStr}T00:00:00.000Z`;
+      const endIso = `${weekEndStr}T23:59:59.999Z`;
+
+      // 1. Flagged entries for the week (flat queries, same pattern used elsewhere)
+      const { data: entriesData } = await supabase
+        .from('diary_entries')
+        .select('*')
+        .gte('created_at', startIso)
+        .lte('created_at', endIso);
+
+      const { data: flagsData } = await supabase.from('entry_flags').select('*');
+
+      const flagsByEntryId: Record<string, EntryFlag> = {};
+      (flagsData || []).forEach((f: any) => {
+        flagsByEntryId[f.entry_id] = f as EntryFlag;
+      });
+
+      const flaggedThisWeek = (entriesData || []).filter((e: any) => flagsByEntryId[e.id]?.is_flagged);
+
+      // 2. Existing to-do items for this week
+      const { data: existingItems } = await supabase
+        .from('todo_items')
+        .select('*')
+        .eq('week_start', weekStartStr)
+        .order('sort_order', { ascending: true });
+
+      const existingByEntryId = new Set((existingItems || []).map((t: any) => t.entry_id));
+      const maxSortOrder = (existingItems || []).reduce((max: number, t: any) => Math.max(max, t.sort_order), -1);
+
+      // 3. New to-do rows for flagged entries that don't have one yet
+      const newRows = flaggedThisWeek
+        .filter((e: any) => !existingByEntryId.has(e.id))
+        .map((e: any, idx: number) => ({
+          entry_id: e.id,
+          week_start: weekStartStr,
+          text: flagsByEntryId[e.id]?.summary_bullet || e.transcription || 'Nhật ký cần chú ý',
+          sort_order: maxSortOrder + 1 + idx,
+          is_done: false
+        }));
+
+      // Existing rows include dismissed ones on purpose -- their entry_id must
+      // still block re-creation above, they're just filtered out below.
+      let mergedItems: TodoItem[] = (existingItems || []) as TodoItem[];
+
+      if (newRows.length > 0) {
+        const { data: inserted, error } = await supabase
+          .from('todo_items')
+          .upsert(newRows, { onConflict: 'entry_id', ignoreDuplicates: true })
+          .select();
+
+        if (error) {
+          console.warn('Failed to populate new to-do items:', error);
+        } else if (inserted) {
+          mergedItems = [...mergedItems, ...(inserted as TodoItem[])];
+        }
+      }
+
+      setTodoItems(sortTodoItems(mergedItems.filter((t) => !t.dismissed)));
+    } catch (err) {
+      console.warn('Todo list load exception:', err);
+    } finally {
+      setTodoLoading(false);
+    }
+  };
+
   useEffect(() => {
     fetchDigestForDate(selectedDate);
   }, [selectedDate]);
+
+  useEffect(() => {
+    fetchAndPopulateTodos(weekStart);
+  }, [weekStart]);
 
   const changeDateByDays = (days: number) => {
     const d = new Date(selectedDate);
     d.setDate(d.getDate() + days);
     setSelectedDate(d.toISOString().split('T')[0]);
+  };
+
+  const changeWeekBy = (weeks: number) => {
+    setWeekStart((prev) => addDays(prev, weeks * 7));
+  };
+
+  const toggleTodoDone = async (item: TodoItem) => {
+    const newDone = !item.is_done;
+    setTodoItems((prev) => sortTodoItems(prev.map((t) => (t.id === item.id ? { ...t, is_done: newDone } : t))));
+
+    const { error } = await supabase.from('todo_items').update({ is_done: newDone }).eq('id', item.id);
+    if (error) {
+      setToast({ message: 'Lỗi cập nhật to-do: ' + error.message, type: 'error', open: true });
+      setTodoItems((prev) => sortTodoItems(prev.map((t) => (t.id === item.id ? { ...t, is_done: item.is_done } : t))));
+    }
+  };
+
+  const updateTodoDueDate = async (item: TodoItem, dueDate: string) => {
+    const newDue = dueDate || null;
+    setTodoItems((prev) => prev.map((t) => (t.id === item.id ? { ...t, due_date: newDue } : t)));
+
+    const { error } = await supabase.from('todo_items').update({ due_date: newDue }).eq('id', item.id);
+    if (error) {
+      setToast({ message: 'Lỗi cập nhật hạn chót: ' + error.message, type: 'error', open: true });
+    }
+  };
+
+  const updateTodoText = async (item: TodoItem, text: string) => {
+    setTodoItems((prev) => prev.map((t) => (t.id === item.id ? { ...t, text } : t)));
+
+    const { error } = await supabase.from('todo_items').update({ text }).eq('id', item.id);
+    if (error) {
+      setToast({ message: 'Lỗi cập nhật nội dung: ' + error.message, type: 'error', open: true });
+      setTodoItems((prev) => prev.map((t) => (t.id === item.id ? { ...t, text: item.text } : t)));
+    }
+  };
+
+  // Soft-delete (dismissed = true) rather than a hard DELETE -- the row must
+  // stick around so the weekly auto-populate merge doesn't recreate it the
+  // next time this entry is still flagged.
+  const deleteTodoItem = async (item: TodoItem) => {
+    setTodoItems((prev) => prev.filter((t) => t.id !== item.id));
+
+    const { error } = await supabase.from('todo_items').update({ dismissed: true }).eq('id', item.id);
+    if (error) {
+      setToast({ message: 'Lỗi xóa mục: ' + error.message, type: 'error', open: true });
+      fetchAndPopulateTodos(weekStart);
+    }
+  };
+
+  const handleTodoDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const incomplete = todoItems.filter((t) => !t.is_done);
+    const oldIndex = incomplete.findIndex((t) => t.id === active.id);
+    const newIndex = incomplete.findIndex((t) => t.id === over.id);
+    if (oldIndex === -1 || newIndex === -1) return;
+
+    const reordered = arrayMove(incomplete, oldIndex, newIndex).map((t, idx) => ({ ...t, sort_order: idx }));
+    const doneItems = todoItems.filter((t) => t.is_done);
+
+    setTodoItems(sortTodoItems([...reordered, ...doneItems]));
+
+    try {
+      await Promise.all(
+        reordered.map((t) => supabase.from('todo_items').update({ sort_order: t.sort_order }).eq('id', t.id))
+      );
+    } catch (err) {
+      console.warn('Failed to persist to-do order:', err);
+    }
   };
 
   // Manual Trigger: "Tạo Tổng Hợp" via the Vercel Serverless API ONLY.
@@ -240,87 +404,82 @@ export const DigestRoute: React.FC<DigestRouteProps> = ({ onRefresh }) => {
             </div>
           </div>
 
-          {/* FLAGGED ENTRIES LIST */}
+          {/* WEEKLY TO-DO LIST */}
           <div className="glass-card rounded-3xl p-5 border border-slate-700/60 space-y-3 shadow-xl">
             <div className="flex items-center justify-between border-b border-slate-800 pb-2">
               <h3 className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
-                <Layers className="w-4 h-4 text-amber-400" />
-                Danh Sách Mục Flagged Cần Chú Ý ({flaggedEntries.length})
+                <ListChecks className="w-4 h-4 text-amber-400" />
+                To-Do Tuần Này ({todoItems.filter((t) => !t.is_done).length})
               </h3>
             </div>
 
-            {flaggedEntries.length === 0 ? (
+            {/* Week Selector Banner */}
+            <div className="glass-panel rounded-2xl p-2 flex items-center justify-between border border-slate-800">
+              <button
+                onClick={() => changeWeekBy(-1)}
+                className="p-1.5 rounded-xl bg-slate-900 text-slate-300 hover:bg-slate-800"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              <span className="text-xs font-bold text-slate-200">Tuần {formatWeekLabel(weekStart)}</span>
+              <button
+                onClick={() => changeWeekBy(1)}
+                className="p-1.5 rounded-xl bg-slate-900 text-slate-300 hover:bg-slate-800"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+
+            {todoLoading ? (
+              <div className="py-6 text-center text-xs text-slate-500 space-y-2">
+                <RefreshCw className="w-5 h-5 animate-spin mx-auto text-sky-400" />
+              </div>
+            ) : todoItems.length === 0 ? (
               <p className="text-xs text-slate-500 py-3 text-center">
-                Không có nhật ký nào bị gắn cờ chú ý trong ngày này.
+                Không có nhật ký nào bị gắn cờ chú ý trong tuần này.
               </p>
             ) : (
-              <div className="space-y-2.5">
-                {flaggedEntries.map(({ entry, flag }) => {
-                  const isExpanded = expandedEntryId === entry.id;
-
-                  return (
-                    <div
-                      key={entry.id}
-                      className="p-3 rounded-2xl bg-slate-900/90 border border-slate-800 space-y-2 text-xs transition"
-                    >
-                      <div
-                        onClick={() => setExpandedEntryId(isExpanded ? null : entry.id)}
-                        className="flex items-start justify-between gap-2 cursor-pointer"
-                      >
-                        <div className="flex items-start gap-2 flex-1">
-                          <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-                          <div>
-                            <p className="font-semibold text-slate-100 leading-snug">
-                              {flag.summary_bullet || entry.transcription || 'Nhật ký đính kèm'}
-                            </p>
-
-                            <div className="flex items-center gap-2 mt-1">
-                              <span className="px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-400 text-[10px] font-bold border border-amber-500/30 flex items-center gap-1">
-                                <Tag className="w-3 h-3" />
-                                {flag.flag_reason || 'chú ý'}
-                              </span>
-                              <span className="text-[10px] text-slate-500">
-                                {new Date(entry.created_at).toLocaleTimeString('vi-VN', {
-                                  hour: '2-digit',
-                                  minute: '2-digit'
-                                })}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-
-                        <button className="p-1 text-slate-400 hover:text-white">
-                          {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                        </button>
-                      </div>
-
-                      {/* Expanded View: Full Transcript & Photo */}
-                      {isExpanded && (
-                        <div className="pt-2 border-t border-slate-800 space-y-2 animate-fade-in">
-                          {entry.photo_url && (
-                            <img
-                              src={entry.photo_url}
-                              alt="Flagged entry photo"
-                              className="w-full h-40 object-cover rounded-xl border border-slate-700"
-                            />
-                          )}
-
-                          {entry.voice_url && (
-                            <div className="p-2 rounded-xl bg-slate-950 border border-slate-800 flex items-center gap-2">
-                              <Volume2 className="w-4 h-4 text-sky-400 shrink-0" />
-                              <audio controls src={entry.voice_url} className="w-full h-7" />
-                            </div>
-                          )}
-
-                          <div className="p-2.5 rounded-xl bg-slate-950 border border-slate-800 text-[11px] text-slate-300 leading-relaxed">
-                            <span className="font-bold text-slate-200 block mb-0.5">Văn bản ghi chép đầy đủ:</span>
-                            {entry.transcription || 'Chưa có ghi chép văn bản.'}
-                          </div>
-                        </div>
-                      )}
+              <div className="space-y-3">
+                <DndContext sensors={dndSensors} collisionDetection={closestCenter} onDragEnd={handleTodoDragEnd}>
+                  <SortableContext
+                    items={todoItems.filter((t) => !t.is_done).map((t) => t.id)}
+                    strategy={verticalListSortingStrategy}
+                  >
+                    <div className="space-y-2">
+                      {todoItems
+                        .filter((t) => !t.is_done)
+                        .map((item) => (
+                          <TodoItemRow
+                            key={item.id}
+                            item={item}
+                            onToggleDone={toggleTodoDone}
+                            onDueDateChange={updateTodoDueDate}
+                            onTextChange={updateTodoText}
+                            onDelete={deleteTodoItem}
+                          />
+                        ))}
                     </div>
-                  );
-                })}
+                  </SortableContext>
+                </DndContext>
+
+                {todoItems.some((t) => t.is_done) && (
+                  <div className="pt-2 border-t border-slate-800/60 space-y-2">
+                    <p className="text-[10px] text-slate-500 uppercase tracking-wider">Đã hoàn thành</p>
+                    {todoItems
+                      .filter((t) => t.is_done)
+                      .map((item) => (
+                        <TodoItemRow
+                          key={item.id}
+                          item={item}
+                          onToggleDone={toggleTodoDone}
+                          onDueDateChange={updateTodoDueDate}
+                          onTextChange={updateTodoText}
+                          onDelete={deleteTodoItem}
+                          draggable={false}
+                        />
+                      ))}
+                  </div>
+                )}
               </div>
             )}
           </div>
