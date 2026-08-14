@@ -211,6 +211,16 @@ export const DigestRoute: React.FC<DigestRouteProps> = ({ onRefresh }) => {
     }
   };
 
+  const updateTodoText = async (item: TodoItem, text: string) => {
+    setTodoItems((prev) => prev.map((t) => (t.id === item.id ? { ...t, text } : t)));
+
+    const { error } = await supabase.from('todo_items').update({ text }).eq('id', item.id);
+    if (error) {
+      setToast({ message: 'Lỗi cập nhật nội dung: ' + error.message, type: 'error', open: true });
+      setTodoItems((prev) => prev.map((t) => (t.id === item.id ? { ...t, text: item.text } : t)));
+    }
+  };
+
   const deleteTodoItem = async (item: TodoItem) => {
     setTodoItems((prev) => prev.filter((t) => t.id !== item.id));
 
@@ -439,6 +449,7 @@ export const DigestRoute: React.FC<DigestRouteProps> = ({ onRefresh }) => {
                             item={item}
                             onToggleDone={toggleTodoDone}
                             onDueDateChange={updateTodoDueDate}
+                            onTextChange={updateTodoText}
                             onDelete={deleteTodoItem}
                           />
                         ))}
@@ -457,6 +468,7 @@ export const DigestRoute: React.FC<DigestRouteProps> = ({ onRefresh }) => {
                           item={item}
                           onToggleDone={toggleTodoDone}
                           onDueDateChange={updateTodoDueDate}
+                          onTextChange={updateTodoText}
                           onDelete={deleteTodoItem}
                           draggable={false}
                         />

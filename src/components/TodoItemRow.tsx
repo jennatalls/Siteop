@@ -1,13 +1,14 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { GripVertical, CheckCircle2, Circle, Trash2, Calendar } from 'lucide-react';
+import { GripVertical, CheckCircle2, Circle, Trash2, Calendar, Pencil } from 'lucide-react';
 import { TodoItem } from '../lib/types';
 
 interface TodoItemRowProps {
   item: TodoItem;
   onToggleDone: (item: TodoItem) => void;
   onDueDateChange: (item: TodoItem, dueDate: string) => void;
+  onTextChange: (item: TodoItem, text: string) => void;
   onDelete: (item: TodoItem) => void;
   draggable?: boolean;
 }
@@ -16,6 +17,7 @@ export const TodoItemRow: React.FC<TodoItemRowProps> = ({
   item,
   onToggleDone,
   onDueDateChange,
+  onTextChange,
   onDelete,
   draggable = true
 }) => {
@@ -23,6 +25,29 @@ export const TodoItemRow: React.FC<TodoItemRowProps> = ({
     id: item.id,
     disabled: !draggable
   });
+
+  const [isEditing, setIsEditing] = useState(false);
+  const [draftText, setDraftText] = useState(item.text);
+
+  // Keep the draft in sync if the item's text changes from elsewhere (e.g. re-populate)
+  useEffect(() => {
+    if (!isEditing) setDraftText(item.text);
+  }, [item.text, isEditing]);
+
+  const commitEdit = () => {
+    setIsEditing(false);
+    const trimmed = draftText.trim();
+    if (trimmed && trimmed !== item.text) {
+      onTextChange(item, trimmed);
+    } else {
+      setDraftText(item.text);
+    }
+  };
+
+  const cancelEdit = () => {
+    setDraftText(item.text);
+    setIsEditing(false);
+  };
 
   const style: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),
@@ -65,13 +90,43 @@ export const TodoItemRow: React.FC<TodoItemRowProps> = ({
         )}
       </button>
 
-      <p
-        className={`flex-1 leading-snug ${
-          item.is_done ? 'text-slate-500 line-through' : 'text-slate-200'
-        }`}
-      >
-        {item.text}
-      </p>
+      {isEditing ? (
+        <textarea
+          autoFocus
+          rows={2}
+          value={draftText}
+          onChange={(e) => setDraftText(e.target.value)}
+          onBlur={commitEdit}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault();
+              commitEdit();
+            } else if (e.key === 'Escape') {
+              cancelEdit();
+            }
+          }}
+          className="flex-1 bg-slate-950 border border-sky-500/40 rounded-lg px-2 py-1 text-xs text-slate-100 focus:outline-none resize-none"
+        />
+      ) : (
+        <p
+          onClick={() => setIsEditing(true)}
+          className={`flex-1 leading-snug cursor-text ${
+            item.is_done ? 'text-slate-500 line-through' : 'text-slate-200'
+          }`}
+        >
+          {item.text}
+        </p>
+      )}
+
+      {!isEditing && (
+        <button
+          onClick={() => setIsEditing(true)}
+          className="shrink-0 p-1 text-slate-500 hover:text-sky-400"
+          aria-label="Sửa nội dung"
+        >
+          <Pencil className="w-3.5 h-3.5" />
+        </button>
+      )}
 
       <div className="flex items-center gap-1 shrink-0">
         <Calendar className="w-3.5 h-3.5 text-slate-500" />
