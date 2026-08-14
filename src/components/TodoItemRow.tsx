@@ -129,7 +129,7 @@ export const TodoItemRow: React.FC<TodoItemRowProps> = ({
       )}
 
       <div className="flex items-center gap-1 shrink-0">
-        <Calendar className="w-3.5 h-3.5 text-slate-500" />
+        <Calendar className="w-3.5 h-3.5 text-sky-400" />
         <input
           type="date"
           value={item.due_date || ''}
