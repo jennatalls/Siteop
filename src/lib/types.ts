@@ -61,6 +61,7 @@ export interface TodoItem {
   due_date?: string | null;
   sort_order: number;
   is_done: boolean;
+  dismissed: boolean;
   created_at: string;
 }
 

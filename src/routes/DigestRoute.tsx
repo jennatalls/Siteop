@@ -149,6 +149,8 @@ export const DigestRoute: React.FC<DigestRouteProps> = ({ onRefresh }) => {
           is_done: false
         }));
 
+      // Existing rows include dismissed ones on purpose -- their entry_id must
+      // still block re-creation above, they're just filtered out below.
       let mergedItems: TodoItem[] = (existingItems || []) as TodoItem[];
 
       if (newRows.length > 0) {
@@ -164,7 +166,7 @@ export const DigestRoute: React.FC<DigestRouteProps> = ({ onRefresh }) => {
         }
       }
 
-      setTodoItems(sortTodoItems(mergedItems));
+      setTodoItems(sortTodoItems(mergedItems.filter((t) => !t.dismissed)));
     } catch (err) {
       console.warn('Todo list load exception:', err);
     } finally {
@@ -221,10 +223,13 @@ export const DigestRoute: React.FC<DigestRouteProps> = ({ onRefresh }) => {
     }
   };
 
+  // Soft-delete (dismissed = true) rather than a hard DELETE -- the row must
+  // stick around so the weekly auto-populate merge doesn't recreate it the
+  // next time this entry is still flagged.
   const deleteTodoItem = async (item: TodoItem) => {
     setTodoItems((prev) => prev.filter((t) => t.id !== item.id));
 
-    const { error } = await supabase.from('todo_items').delete().eq('id', item.id);
+    const { error } = await supabase.from('todo_items').update({ dismissed: true }).eq('id', item.id);
     if (error) {
       setToast({ message: 'Lỗi xóa mục: ' + error.message, type: 'error', open: true });
       fetchAndPopulateTodos(weekStart);
