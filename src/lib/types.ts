@@ -53,6 +53,17 @@ export interface DailyDigest {
   generated_at: string;
 }
 
+export interface TodoItem {
+  id: string;
+  entry_id?: string | null;
+  week_start: string; // YYYY-MM-DD, Monday of the ISO week
+  text: string;
+  due_date?: string | null;
+  sort_order: number;
+  is_done: boolean;
+  created_at: string;
+}
+
 export interface SyncLog {
   id: string;
   synced_at: string;
