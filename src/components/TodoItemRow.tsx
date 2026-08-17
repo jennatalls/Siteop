@@ -59,17 +59,15 @@ export const TodoItemRow: React.FC<TodoItemRowProps> = ({
     <div
       ref={setNodeRef}
       style={style}
-      className={`flex items-center gap-2 p-2.5 rounded-2xl border text-xs transition ${
-        item.is_done
-          ? 'bg-slate-900/50 border-slate-800/60'
-          : 'bg-slate-900/90 border-slate-800'
+      className={`flex items-center gap-2 p-2.5 rounded-[0.85rem] border border-ink text-xs transition ${
+        item.is_done ? 'bg-paper-soft/50' : 'bg-card-alt'
       }`}
     >
       {draggable ? (
         <button
           {...attributes}
           {...listeners}
-          className="p-1 text-slate-500 hover:text-slate-300 cursor-grab active:cursor-grabbing shrink-0 touch-none"
+          className="p-1 text-ink-soft hover:text-ink cursor-grab active:cursor-grabbing shrink-0 touch-none"
           aria-label="Kéo để sắp xếp"
         >
           <GripVertical className="w-4 h-4" />
@@ -80,11 +78,11 @@ export const TodoItemRow: React.FC<TodoItemRowProps> = ({
 
       <button
         onClick={() => onToggleDone(item)}
-        className="shrink-0 text-slate-400 hover:text-emerald-400"
+        className="shrink-0 text-ink-soft hover:text-positive"
         aria-label={item.is_done ? 'Đánh dấu chưa xong' : 'Đánh dấu đã xong'}
       >
         {item.is_done ? (
-          <CheckCircle2 className="w-4.5 h-4.5 text-emerald-500" />
+          <CheckCircle2 className="w-4.5 h-4.5 text-positive" />
         ) : (
           <Circle className="w-4.5 h-4.5" />
         )}
@@ -105,13 +103,13 @@ export const TodoItemRow: React.FC<TodoItemRowProps> = ({
               cancelEdit();
             }
           }}
-          className="flex-1 bg-slate-950 border border-sky-500/40 rounded-lg px-2 py-1 text-xs text-slate-100 focus:outline-none resize-none"
+          className="flex-1 bg-card border border-ink rounded-[0.6rem] px-2 py-1 text-xs text-ink focus:outline-none focus:ring-2 focus:ring-accent resize-none"
         />
       ) : (
         <p
           onClick={() => setIsEditing(true)}
           className={`flex-1 leading-snug cursor-text ${
-            item.is_done ? 'text-slate-500 line-through' : 'text-slate-200'
+            item.is_done ? 'text-ink-faint line-through' : 'text-ink'
           }`}
         >
           {item.text}
@@ -121,7 +119,7 @@ export const TodoItemRow: React.FC<TodoItemRowProps> = ({
       {!isEditing && (
         <button
           onClick={() => setIsEditing(true)}
-          className="shrink-0 p-1 text-slate-500 hover:text-sky-400"
+          className="shrink-0 p-1 text-ink-soft hover:text-ink"
           aria-label="Sửa nội dung"
         >
           <Pencil className="w-3.5 h-3.5" />
@@ -129,18 +127,18 @@ export const TodoItemRow: React.FC<TodoItemRowProps> = ({
       )}
 
       <div className="flex items-center gap-1 shrink-0">
-        <Calendar className="w-3.5 h-3.5 text-sky-400" />
+        <Calendar className="w-3.5 h-3.5 text-ink" />
         <input
           type="date"
           value={item.due_date || ''}
           onChange={(e) => onDueDateChange(item, e.target.value)}
-          className="bg-transparent text-[11px] text-slate-300 focus:outline-none w-[92px]"
+          className="bg-transparent text-[11px] text-ink focus:outline-none w-[92px]"
         />
       </div>
 
       <button
         onClick={() => onDelete(item)}
-        className="shrink-0 p-1 text-slate-500 hover:text-rose-400"
+        className="shrink-0 p-1 text-ink-soft hover:text-danger"
         aria-label="Xóa mục"
       >
         <Trash2 className="w-3.5 h-3.5" />

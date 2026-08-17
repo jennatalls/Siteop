@@ -216,13 +216,13 @@ export const DiaryRoute: React.FC<DiaryRouteProps> = ({ entries, onRefresh, onNa
       {/* Screen Title & Quick Actions */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-xl font-bold text-slate-100 tracking-tight">Nhật Ký Công Trình</h2>
-          <p className="text-xs text-slate-400">Danh sách nhật ký đã ghi nhận ({filteredEntries.length})</p>
+          <h2 className="text-xl font-bold text-ink tracking-tight">Nhật Ký Công Trình</h2>
+          <p className="text-xs text-ink-soft">Danh sách nhật ký đã ghi nhận ({filteredEntries.length})</p>
         </div>
 
         <button
           onClick={onNavigateToSync}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-500/15 border border-indigo-500/30 text-indigo-400 text-xs font-semibold hover:bg-indigo-500/25 transition"
+          className="pill btn-outline px-3 py-1.5"
         >
           <Download className="w-3.5 h-3.5" />
           <span>Xuất Drive</span>
@@ -231,18 +231,18 @@ export const DiaryRoute: React.FC<DiaryRouteProps> = ({ entries, onRefresh, onNa
 
       {/* Search Input */}
       <div className="relative">
-        <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+        <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-faint" />
         <input
           type="text"
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           placeholder="Tìm từ khóa, thợ nề, xi măng, gạch..."
-          className="w-full pl-10 pr-4 py-2.5 rounded-2xl bg-slate-900/90 border border-slate-700/80 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-sky-500 transition"
+          className="field w-full pl-10 pr-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-accent transition"
         />
         {searchQuery && (
           <button
             onClick={() => setSearchQuery('')}
-            className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-white"
+            className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-ink-soft hover:text-ink"
           >
             <X className="w-4 h-4" />
           </button>
@@ -255,10 +255,10 @@ export const DiaryRoute: React.FC<DiaryRouteProps> = ({ entries, onRefresh, onNa
           {/* Category Filter Pills */}
           <button
             onClick={() => setSelectedCategory('all')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-medium shrink-0 transition ${
+            className={`px-3 py-1.5 rounded-pill text-xs font-semibold shrink-0 border border-ink transition ${
               selectedCategory === 'all'
-                ? 'bg-sky-500 text-slate-950 font-bold'
-                : 'bg-slate-900/80 text-slate-400 hover:text-slate-200 border border-slate-800'
+                ? 'bg-accent text-ink'
+                : 'bg-card text-ink-soft hover:text-ink'
             }`}
           >
             Tất cả danh mục
@@ -268,10 +268,10 @@ export const DiaryRoute: React.FC<DiaryRouteProps> = ({ entries, onRefresh, onNa
             <button
               key={cat}
               onClick={() => setSelectedCategory(cat)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-medium shrink-0 transition ${
+              className={`px-3 py-1.5 rounded-pill text-xs font-semibold shrink-0 border border-ink transition ${
                 selectedCategory === cat
-                  ? 'bg-sky-500 text-slate-950 font-bold'
-                  : 'bg-slate-900/80 text-slate-400 hover:text-slate-200 border border-slate-800'
+                  ? 'bg-accent text-ink'
+                  : 'bg-card text-ink-soft hover:text-ink'
               }`}
             >
               {cat}
@@ -281,21 +281,21 @@ export const DiaryRoute: React.FC<DiaryRouteProps> = ({ entries, onRefresh, onNa
 
         <div className="grid grid-cols-2 gap-2 text-xs">
           <div>
-            <label className="block text-[10px] text-slate-400 mb-0.5">Từ ngày</label>
+            <label className="block text-[10px] font-semibold text-ink-soft mb-0.5">Từ ngày</label>
             <input
               type="date"
               value={startDate}
               onChange={(e) => setStartDate(e.target.value)}
-              className="w-full px-2.5 py-1.5 rounded-xl bg-slate-900/80 border border-slate-800 text-slate-300 focus:outline-none"
+              className="field w-full px-2.5 py-1.5 text-ink focus:outline-none focus:ring-2 focus:ring-accent"
             />
           </div>
           <div>
-            <label className="block text-[10px] text-slate-400 mb-0.5">Đến ngày</label>
+            <label className="block text-[10px] font-semibold text-ink-soft mb-0.5">Đến ngày</label>
             <input
               type="date"
               value={endDate}
               onChange={(e) => setEndDate(e.target.value)}
-              className="w-full px-2.5 py-1.5 rounded-xl bg-slate-900/80 border border-slate-800 text-slate-300 focus:outline-none"
+              className="field w-full px-2.5 py-1.5 text-ink focus:outline-none focus:ring-2 focus:ring-accent"
             />
           </div>
         </div>
@@ -303,10 +303,10 @@ export const DiaryRoute: React.FC<DiaryRouteProps> = ({ entries, onRefresh, onNa
 
       {/* Diary Entry Cards List */}
       {filteredEntries.length === 0 ? (
-        <div className="glass-card rounded-2xl p-8 text-center space-y-3 my-4">
-          <FileText className="w-10 h-10 text-slate-600 mx-auto" />
-          <p className="text-sm font-semibold text-slate-300">Chưa tìm thấy nhật ký nào</p>
-          <p className="text-xs text-slate-500">
+        <div className="card p-8 text-center space-y-3 my-4">
+          <FileText className="w-10 h-10 text-ink-faint mx-auto" />
+          <p className="text-sm font-semibold text-ink">Chưa tìm thấy nhật ký nào</p>
+          <p className="text-xs text-ink-soft">
             Thử thay đổi từ khóa tìm kiếm hoặc qua tab Ghi Nhận để tạo nhật ký mới
           </p>
         </div>
@@ -334,21 +334,21 @@ export const DiaryRoute: React.FC<DiaryRouteProps> = ({ entries, onRefresh, onNa
               <div
                 key={entry.id}
                 onClick={() => setActiveEntry(entry)}
-                className="glass-card rounded-2xl p-4 border border-slate-700/60 shadow-lg hover:border-sky-500/40 active:scale-[0.99] transition-all cursor-pointer space-y-3"
+                className="card p-4 hover:bg-paper-soft/40 active:scale-[0.99] transition-all cursor-pointer space-y-3"
               >
                 {/* Header: Date & Status */}
                 <div className="flex items-center justify-between">
-                  <span className="flex items-center gap-1.5 text-xs font-semibold text-slate-300">
-                    <Calendar className="w-3.5 h-3.5 text-sky-400" />
+                  <span className="flex items-center gap-1.5 text-xs font-semibold text-ink">
+                    <Calendar className="w-3.5 h-3.5 text-ink-soft" />
                     {dateStr}
                   </span>
 
                   <button
                     onClick={(e) => toggleEntryStatus(entry, e)}
-                    className={`px-2.5 py-0.5 rounded-full text-[11px] font-semibold border flex items-center gap-1 transition ${
+                    className={`pill px-2.5 py-0.5 border border-ink ${
                       entry.status === 'filed'
-                        ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
-                        : 'bg-amber-500/15 text-amber-400 border-amber-500/30'
+                        ? 'bg-positive-soft text-positive'
+                        : 'bg-warning-soft text-warning'
                     }`}
                   >
                     {entry.status === 'filed' ? (
@@ -369,20 +369,20 @@ export const DiaryRoute: React.FC<DiaryRouteProps> = ({ entries, onRefresh, onNa
                     <img
                       src={entry.photo_url}
                       alt="Thumbnail"
-                      className="w-16 h-16 rounded-xl object-cover border border-slate-700 shrink-0"
+                      className="w-16 h-16 rounded-[0.85rem] object-cover border border-ink shrink-0"
                     />
                   )}
                   <div className="flex-1 space-y-1">
-                    <p className="text-xs text-slate-300 line-clamp-2 leading-relaxed">{snippet}</p>
+                    <p className="text-xs text-ink-soft line-clamp-2 leading-relaxed">{snippet}</p>
 
                     {/* Category & Confidence Badge */}
                     <div className="flex items-center gap-2 pt-1">
-                      <span className="px-2 py-0.5 rounded-lg bg-sky-500/10 text-sky-400 border border-sky-500/20 text-[10px] font-medium">
+                      <span className="pill px-2 py-0.5 bg-accent-soft border border-ink text-ink">
                         {category}
                       </span>
 
                       {ext?.confidence_score !== undefined && (
-                        <span className="flex items-center gap-1 text-[10px] text-amber-400 font-mono">
+                        <span className="flex items-center gap-1 text-[10px] font-bold text-ink-soft font-mono">
                           <Sparkles className="w-3 h-3" />
                           {(ext.confidence_score * 100).toFixed(0)}% AI
                         </span>
@@ -392,7 +392,7 @@ export const DiaryRoute: React.FC<DiaryRouteProps> = ({ entries, onRefresh, onNa
                         <button
                           onClick={(e) => retryTranscription(entry, e)}
                           disabled={retryingEntryId !== null}
-                          className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-rose-500/15 text-rose-400 border border-rose-500/30 text-[10px] font-semibold hover:bg-rose-500/25 disabled:opacity-50 transition"
+                          className="pill px-2 py-0.5 bg-danger-soft text-danger border border-ink disabled:opacity-50 transition"
                         >
                           {isRetrying ? (
                             <RefreshCw className="w-3 h-3 animate-spin" />
@@ -405,7 +405,7 @@ export const DiaryRoute: React.FC<DiaryRouteProps> = ({ entries, onRefresh, onNa
                     </div>
                   </div>
 
-                  <ChevronRight className="w-4 h-4 text-slate-500 self-center shrink-0" />
+                  <ChevronRight className="w-4 h-4 text-ink-faint self-center shrink-0" />
                 </div>
               </div>
             );
@@ -415,19 +415,20 @@ export const DiaryRoute: React.FC<DiaryRouteProps> = ({ entries, onRefresh, onNa
 
       {/* Entry Detail Modal / Drawer */}
       {activeEntry && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-950/80 backdrop-blur-md animate-fade-in">
-          <div className="w-full max-w-md max-h-[85vh] overflow-y-auto glass-card rounded-t-3xl sm:rounded-3xl p-6 border border-slate-700/80 shadow-2xl space-y-5">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-ink/40 animate-fade-in">
+          <div className="w-full max-w-md max-h-[85vh] overflow-y-auto card rounded-t-card sm:rounded-card p-6 space-y-5">
             {/* Header */}
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+            <div className="flex items-center justify-between border-b border-ink/15 pb-3">
               <div>
-                <h3 className="text-base font-bold text-slate-100">Chi Tiết Nhật Ký</h3>
-                <p className="text-xs text-slate-400">
+                <h3 className="text-base font-bold text-ink">Chi Tiết Nhật Ký</h3>
+                <p className="text-xs text-ink-soft">
                   {new Date(activeEntry.created_at).toLocaleString('vi-VN')}
                 </p>
               </div>
               <button
                 onClick={() => setActiveEntry(null)}
-                className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800"
+                aria-label="Đóng"
+                className="p-1.5 text-ink-soft hover:text-ink rounded-[0.6rem] hover:bg-paper-soft"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -435,15 +436,15 @@ export const DiaryRoute: React.FC<DiaryRouteProps> = ({ entries, onRefresh, onNa
 
             {/* Photo View */}
             {activeEntry.photo_url && (
-              <div className="rounded-2xl overflow-hidden border border-slate-700">
+              <div className="rounded-card overflow-hidden border border-ink">
                 <img src={activeEntry.photo_url} alt="Chi tiết ảnh" className="w-full h-56 object-cover" />
               </div>
             )}
 
             {/* Voice Audio Player */}
             {activeEntry.voice_url && (
-              <div className="p-3 rounded-2xl bg-slate-900/90 border border-slate-700 space-y-1">
-                <div className="flex items-center gap-2 text-xs text-sky-400 font-semibold">
+              <div className="p-3 rounded-card bg-card-alt border border-ink space-y-1">
+                <div className="flex items-center gap-2 text-xs text-ink font-semibold">
                   <Volume2 className="w-4 h-4" /> File Ghi Âm Giọng Nói
                 </div>
                 <audio controls src={activeEntry.voice_url} className="w-full h-8 mt-1" />
@@ -452,13 +453,13 @@ export const DiaryRoute: React.FC<DiaryRouteProps> = ({ entries, onRefresh, onNa
 
             {/* Transcription */}
             <div className="space-y-1">
-              <div className="flex items-center justify-between">
-                <label className="block text-xs font-semibold text-slate-300">Văn bản ghi chép:</label>
+              <div className="flex items-center justify-between gap-2">
+                <label className="block text-xs font-semibold text-ink">Văn bản ghi chép:</label>
                 {activeEntry.voice_url && !activeEntry.transcription && (
                   <button
                     onClick={(e) => retryTranscription(activeEntry, e)}
                     disabled={retryingEntryId !== null}
-                    className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-rose-500/15 text-rose-400 border border-rose-500/30 text-[11px] font-semibold hover:bg-rose-500/25 disabled:opacity-50 transition"
+                    className="pill px-2.5 py-1 bg-danger-soft text-danger border border-ink disabled:opacity-50 transition"
                   >
                     <RefreshCw
                       className={`w-3.5 h-3.5 ${retryingEntryId === activeEntry.id ? 'animate-spin' : ''}`}
@@ -467,15 +468,15 @@ export const DiaryRoute: React.FC<DiaryRouteProps> = ({ entries, onRefresh, onNa
                   </button>
                 )}
               </div>
-              <p className="p-3 rounded-2xl bg-slate-900/90 border border-slate-800 text-xs text-slate-200 leading-relaxed whitespace-pre-wrap">
+              <p className="p-3 rounded-card bg-card-alt border border-ink text-xs text-ink leading-relaxed whitespace-pre-wrap">
                 {activeEntry.transcription || 'Chưa có ghi chép văn bản.'}
               </p>
             </div>
 
             {/* AI Extracted Information */}
             {activeEntry.extracted_data && (
-              <div className="space-y-3 p-4 rounded-2xl bg-sky-500/5 border border-sky-500/20">
-                <div className="flex items-center justify-between text-xs font-bold text-sky-400">
+              <div className="space-y-3 p-4 rounded-card bg-accent-soft border border-ink">
+                <div className="flex items-center justify-between text-xs font-bold text-ink">
                   <span className="flex items-center gap-1.5">
                     <Sparkles className="w-4 h-4" /> Trích Xuất AI Gemini
                   </span>
@@ -484,8 +485,8 @@ export const DiaryRoute: React.FC<DiaryRouteProps> = ({ entries, onRefresh, onNa
 
                 {activeEntry.extracted_data.materials?.length > 0 && (
                   <div className="text-xs space-y-1">
-                    <span className="font-semibold text-amber-400">Vật tư:</span>
-                    <ul className="list-disc pl-4 space-y-0.5 text-slate-300">
+                    <span className="font-semibold text-warning">Vật tư:</span>
+                    <ul className="list-disc pl-4 space-y-0.5 text-ink">
                       {activeEntry.extracted_data.materials.map((m: any, idx: number) => (
                         <li key={idx}>
                           {m.item}: {m.quantity} {m.unit} {m.note ? `(${m.note})` : ''}
@@ -497,8 +498,8 @@ export const DiaryRoute: React.FC<DiaryRouteProps> = ({ entries, onRefresh, onNa
 
                 {activeEntry.extracted_data.labor?.length > 0 && (
                   <div className="text-xs space-y-1">
-                    <span className="font-semibold text-emerald-400">Nhân công:</span>
-                    <ul className="list-disc pl-4 space-y-0.5 text-slate-300">
+                    <span className="font-semibold text-positive">Nhân công:</span>
+                    <ul className="list-disc pl-4 space-y-0.5 text-ink">
                       {activeEntry.extracted_data.labor.map((l: any, idx: number) => (
                         <li key={idx}>
                           {l.role}: {l.count || 1} người {l.hours ? `(${l.hours})` : ''} — {l.note}
@@ -514,13 +515,13 @@ export const DiaryRoute: React.FC<DiaryRouteProps> = ({ entries, onRefresh, onNa
             <div>
               <button
                 onClick={() => setShowRawJson(!showRawJson)}
-                className="text-xs text-slate-400 hover:text-slate-200 underline"
+                className="text-xs font-semibold text-ink-soft hover:text-ink underline underline-offset-2"
               >
                 {showRawJson ? 'Ẩn Metadata JSON' : 'Xem Raw Metadata JSON'}
               </button>
 
               {showRawJson && (
-                <pre className="mt-2 p-3 rounded-xl bg-slate-950 text-[10px] text-emerald-400 font-mono overflow-x-auto border border-slate-800 max-h-40">
+                <pre className="mt-2 p-3 rounded-[0.85rem] bg-ink text-[10px] text-accent-soft font-mono overflow-x-auto max-h-40">
                   {JSON.stringify(activeEntry, null, 2)}
                 </pre>
               )}

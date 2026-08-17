@@ -317,14 +317,14 @@ export const DigestRoute: React.FC<DigestRouteProps> = ({ onRefresh }) => {
       <div className="space-y-3">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-xl font-bold text-slate-100 tracking-tight">Tổng Hợp Ngày</h2>
-            <p className="text-xs text-slate-400">Báo cáo tiến độ & danh sách cần chú ý (Gemini AI)</p>
+            <h2 className="text-xl font-bold text-ink tracking-tight">Tổng Hợp Ngày</h2>
+            <p className="text-xs text-ink-soft">Báo cáo tiến độ & danh sách cần chú ý (Gemini AI)</p>
           </div>
 
           <button
             onClick={handleGenerateDigest}
             disabled={generating}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 text-xs font-bold shadow-md shadow-amber-500/20 disabled:opacity-50 transition"
+            className="btn-primary flex items-center gap-1.5 px-3 py-1.5 text-xs disabled:opacity-50 transition"
           >
             {generating ? (
               <RefreshCw className="w-3.5 h-3.5 animate-spin" />
@@ -336,27 +336,27 @@ export const DigestRoute: React.FC<DigestRouteProps> = ({ onRefresh }) => {
         </div>
 
         {/* Date Selector Banner */}
-        <div className="glass-panel rounded-2xl p-2.5 flex items-center justify-between border border-slate-800">
+        <div className="card p-2.5 flex items-center justify-between">
           <button
             onClick={() => changeDateByDays(-1)}
-            className="p-1.5 rounded-xl bg-slate-900 text-slate-300 hover:bg-slate-800"
+            className="p-1.5 rounded-[0.6rem] bg-card-alt border border-ink text-ink hover:bg-paper-soft"
           >
             <ChevronLeft className="w-4 h-4" />
           </button>
 
           <div className="flex items-center gap-2">
-            <Calendar className="w-4 h-4 text-sky-400" />
+            <Calendar className="w-4 h-4 text-ink-soft" />
             <input
               type="date"
               value={selectedDate}
               onChange={(e) => setSelectedDate(e.target.value)}
-              className="bg-transparent text-sm font-bold text-slate-100 focus:outline-none cursor-pointer"
+              className="bg-transparent text-sm font-bold text-ink focus:outline-none cursor-pointer"
             />
           </div>
 
           <button
             onClick={() => changeDateByDays(1)}
-            className="p-1.5 rounded-xl bg-slate-900 text-slate-300 hover:bg-slate-800"
+            className="p-1.5 rounded-[0.6rem] bg-card-alt border border-ink text-ink hover:bg-paper-soft"
           >
             <ChevronRight className="w-4 h-4" />
           </button>
@@ -364,78 +364,78 @@ export const DigestRoute: React.FC<DigestRouteProps> = ({ onRefresh }) => {
       </div>
 
       {loading ? (
-        <div className="py-12 text-center text-xs text-slate-500 space-y-2">
-          <RefreshCw className="w-6 h-6 animate-spin mx-auto text-sky-400" />
+        <div className="py-12 text-center text-xs text-ink-soft space-y-2">
+          <RefreshCw className="w-6 h-6 animate-spin mx-auto text-ink" />
           <p>Đang tải dữ liệu tổng hợp...</p>
         </div>
       ) : (
         <div className="space-y-4">
           {/* SECTION 1: "⚠️ CẦN CHÚ Ý" (Agenda Text) */}
-          <div className="glass-card rounded-3xl p-5 border border-amber-500/30 space-y-3 shadow-xl relative overflow-hidden">
-            <div className="flex items-center justify-between border-b border-amber-500/20 pb-2">
-              <h3 className="text-sm font-bold text-amber-400 flex items-center gap-2">
-                <AlertTriangle className="w-4 h-4 text-amber-400" />
+          <div className="card-alt rounded-card p-5 space-y-3 relative overflow-hidden">
+            <div className="flex items-center justify-between border-b border-ink/15 pb-2">
+              <h3 className="text-sm font-bold text-ink flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-warning" />
                 Section 1: ⚠️ Cần Chú Ý (Agenda)
               </h3>
-              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-300 border border-amber-500/20">
+              <span className="pill px-2 py-0.5 bg-warning-soft text-warning border border-ink">
                 To-Do Ngày Mai
               </span>
             </div>
 
-            <div className="text-xs text-slate-200 leading-relaxed whitespace-pre-wrap font-sans">
+            <div className="text-xs text-ink leading-relaxed whitespace-pre-wrap font-sans">
               {digest?.agenda_text || 'Chưa có tổng hợp agenda cần chú ý. Chạm nút "Tạo Tổng Hợp" để Gemini AI phân tích.'}
             </div>
           </div>
 
           {/* SECTION 2: "📋 TÓM TẮT" (Summary Text) */}
-          <div className="glass-card rounded-3xl p-5 border border-sky-500/30 space-y-3 shadow-xl">
-            <div className="flex items-center justify-between border-b border-sky-500/20 pb-2">
-              <h3 className="text-sm font-bold text-sky-400 flex items-center gap-2">
-                <FileCheck2 className="w-4 h-4 text-sky-400" />
+          <div className="card p-5 space-y-3">
+            <div className="flex items-center justify-between border-b border-ink/15 pb-2">
+              <h3 className="text-sm font-bold text-ink flex items-center gap-2">
+                <FileCheck2 className="w-4 h-4 text-info" />
                 Section 2: 📋 Tóm Tắt (Summary)
               </h3>
-              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-sky-500/10 text-sky-300 border border-sky-500/20">
+              <span className="pill px-2 py-0.5 bg-info-soft text-info border border-ink">
                 Tiến Độ Tổng Quan
               </span>
             </div>
 
-            <div className="text-xs text-slate-200 leading-relaxed whitespace-pre-wrap font-sans">
+            <div className="text-xs text-ink leading-relaxed whitespace-pre-wrap font-sans">
               {digest?.summary_text || 'Chưa có tóm tắt tổng quan. Chạm nút "Tạo Tổng Hợp" để Gemini AI tổng hợp tiến độ.'}
             </div>
           </div>
 
           {/* WEEKLY TO-DO LIST */}
-          <div className="glass-card rounded-3xl p-5 border border-slate-700/60 space-y-3 shadow-xl">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-2">
-              <h3 className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
-                <ListChecks className="w-4 h-4 text-amber-400" />
+          <div className="card p-5 space-y-3">
+            <div className="flex items-center justify-between border-b border-ink/15 pb-2">
+              <h3 className="label-micro text-ink flex items-center gap-1.5">
+                <ListChecks className="w-4 h-4 text-warning" />
                 To-Do Tuần Này ({todoItems.filter((t) => !t.is_done).length})
               </h3>
             </div>
 
             {/* Week Selector Banner */}
-            <div className="glass-panel rounded-2xl p-2 flex items-center justify-between border border-slate-800">
+            <div className="card-alt p-2 flex items-center justify-between">
               <button
                 onClick={() => changeWeekBy(-1)}
-                className="p-1.5 rounded-xl bg-slate-900 text-slate-300 hover:bg-slate-800"
+                className="p-1.5 rounded-[0.6rem] bg-card border border-ink text-ink hover:bg-paper-soft"
               >
                 <ChevronLeft className="w-4 h-4" />
               </button>
-              <span className="text-xs font-bold text-slate-200">Tuần {formatWeekLabel(weekStart)}</span>
+              <span className="text-xs font-bold text-ink">Tuần {formatWeekLabel(weekStart)}</span>
               <button
                 onClick={() => changeWeekBy(1)}
-                className="p-1.5 rounded-xl bg-slate-900 text-slate-300 hover:bg-slate-800"
+                className="p-1.5 rounded-[0.6rem] bg-card border border-ink text-ink hover:bg-paper-soft"
               >
                 <ChevronRight className="w-4 h-4" />
               </button>
             </div>
 
             {todoLoading ? (
-              <div className="py-6 text-center text-xs text-slate-500 space-y-2">
-                <RefreshCw className="w-5 h-5 animate-spin mx-auto text-sky-400" />
+              <div className="py-6 text-center text-xs text-ink-soft space-y-2">
+                <RefreshCw className="w-5 h-5 animate-spin mx-auto text-ink" />
               </div>
             ) : todoItems.length === 0 ? (
-              <p className="text-xs text-slate-500 py-3 text-center">
+              <p className="text-xs text-ink-soft py-3 text-center">
                 Không có nhật ký nào bị gắn cờ chú ý trong tuần này.
               </p>
             ) : (
@@ -463,8 +463,8 @@ export const DigestRoute: React.FC<DigestRouteProps> = ({ onRefresh }) => {
                 </DndContext>
 
                 {todoItems.some((t) => t.is_done) && (
-                  <div className="pt-2 border-t border-slate-800/60 space-y-2">
-                    <p className="text-[10px] text-slate-500 uppercase tracking-wider">Đã hoàn thành</p>
+                  <div className="pt-2 border-t border-ink/15 space-y-2">
+                    <p className="label-micro text-ink-soft">Đã hoàn thành</p>
                     {todoItems
                       .filter((t) => t.is_done)
                       .map((item) => (

@@ -247,23 +247,23 @@ export const CaptureRoute: React.FC<CaptureRouteProps> = ({ isOnline, onEntrySav
 
       {/* Screen Title */}
       <div className="text-center space-y-1">
-        <h2 className="text-xl font-bold text-slate-100 tracking-tight">Ghi Nhận Nhật Ký Ngày</h2>
-        <p className="text-xs text-slate-400">Thực hiện theo 3 bước bên dưới trong 1 thẻ duy nhất</p>
+        <h2 className="text-xl font-bold text-ink tracking-tight">Ghi Nhận Nhật Ký Ngày</h2>
+        <p className="text-xs text-ink-soft">Thực hiện theo 3 bước bên dưới trong 1 thẻ duy nhất</p>
       </div>
 
       {/* ONE SINGLE UNIFIED CARD CONTAINER FOR ALL 3 STEPS */}
-      <div className="glass-card rounded-3xl p-6 border border-slate-700/80 shadow-2xl space-y-6">
+      <div className="card p-6 space-y-6">
 
         {/* STEP 1: VOICE RECORDING */}
         <div className="space-y-4">
-          <div className="flex items-center justify-between text-xs font-bold text-slate-200 border-b border-slate-800 pb-2">
-            <span className="flex items-center gap-2 text-sky-400">
-              <span className="w-5 h-5 rounded-full bg-sky-500/20 text-sky-400 border border-sky-500/30 flex items-center justify-center text-[11px] font-bold">
+          <div className="flex items-center justify-between border-b border-ink/15 pb-2">
+            <span className="flex items-center gap-2 label-micro text-ink normal-case">
+              <span className="w-5 h-5 rounded-full bg-ink text-paper flex items-center justify-center text-[11px] font-bold">
                 1
               </span>
               Thu Âm Giọng Nói
             </span>
-            <span className="font-mono text-sky-400 font-bold text-xs bg-sky-500/10 px-2 py-0.5 rounded-full border border-sky-500/20">
+            <span className="font-mono text-ink font-bold text-xs pill bg-accent-soft border border-ink px-2 py-0.5">
               {formatTime(recordingTime)}
             </span>
           </div>
@@ -274,21 +274,19 @@ export const CaptureRoute: React.FC<CaptureRouteProps> = ({ isOnline, onEntrySav
                 type="button"
                 onClick={startRecording}
                 disabled={isSubmitting}
-                className="group relative w-22 h-22 rounded-full bg-gradient-to-tr from-sky-500 to-indigo-600 p-1 flex items-center justify-center shadow-xl shadow-sky-500/25 hover:scale-105 active:scale-95 transition-all disabled:opacity-50"
+                className="group relative w-22 h-22 rounded-full bg-accent border border-ink flex items-center justify-center hover:scale-105 active:scale-95 transition-all disabled:opacity-50"
               >
-                <div className="w-full h-full rounded-full bg-slate-950 flex items-center justify-center group-hover:bg-slate-900 transition">
-                  <Mic className="w-9 h-9 text-sky-400 group-hover:text-sky-300" />
-                </div>
+                <Mic className="w-9 h-9 text-ink" />
               </button>
             ) : (
               <button
                 type="button"
                 onClick={stopRecording}
-                className="relative w-22 h-22 rounded-full bg-rose-500 p-1 flex items-center justify-center active-pulse active:scale-95 transition-all"
+                className="relative w-22 h-22 rounded-full bg-danger border border-ink flex items-center justify-center active-pulse active:scale-95 transition-all"
               >
-                <div className="w-full h-full rounded-full bg-slate-950 flex flex-col items-center justify-center gap-1">
-                  <Square className="w-7 h-7 text-rose-500 fill-rose-500" />
-                  <span className="text-[10px] font-bold text-rose-400 tracking-wider">DỪNG THU</span>
+                <div className="w-full h-full rounded-full flex flex-col items-center justify-center gap-1">
+                  <Square className="w-7 h-7 text-paper fill-paper" />
+                  <span className="text-[10px] font-bold text-paper tracking-wider">DỪNG THU</span>
                 </div>
               </button>
             )}
@@ -296,20 +294,20 @@ export const CaptureRoute: React.FC<CaptureRouteProps> = ({ isOnline, onEntrySav
 
           {/* Audio Player Preview */}
           {audioUrl && !isRecording && (
-            <div className="p-3 rounded-2xl bg-slate-900/90 border border-slate-700/80 flex items-center justify-between gap-3">
+            <div className="p-3 rounded-card bg-card-alt border border-ink flex items-center justify-between gap-3">
               <button
                 onClick={togglePlayAudio}
-                className="w-9 h-9 rounded-xl bg-sky-500/20 text-sky-400 hover:bg-sky-500/30 flex items-center justify-center shrink-0"
+                className="w-9 h-9 rounded-[0.7rem] bg-accent border border-ink text-ink flex items-center justify-center shrink-0"
               >
                 {isPlayingAudio ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4 ml-0.5" />}
               </button>
               <div className="flex-1 text-left">
-                <p className="text-xs font-semibold text-slate-200">Bản ghi sẵn sàng</p>
-                <p className="text-[10px] text-slate-400">Thời lượng: {formatTime(recordingTime)}</p>
+                <p className="text-xs font-semibold text-ink">Bản ghi sẵn sàng</p>
+                <p className="text-[10px] text-ink-soft">Thời lượng: {formatTime(recordingTime)}</p>
               </div>
               <button
                 onClick={clearAudio}
-                className="p-1.5 text-slate-400 hover:text-rose-400 rounded-lg hover:bg-slate-800"
+                className="p-1.5 text-ink-soft hover:text-danger rounded-[0.6rem] hover:bg-paper"
                 title="Xóa ghi âm"
               >
                 <Trash2 className="w-4 h-4" />
@@ -326,9 +324,9 @@ export const CaptureRoute: React.FC<CaptureRouteProps> = ({ isOnline, onEntrySav
 
         {/* STEP 2: PHOTO CAPTURE / UPLOAD (OPTIONAL) */}
         <div className="space-y-3 pt-2">
-          <div className="flex items-center justify-between text-xs font-bold text-slate-200 border-b border-slate-800 pb-2">
-            <span className="flex items-center gap-2 text-amber-400">
-              <span className="w-5 h-5 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30 flex items-center justify-center text-[11px] font-bold">
+          <div className="flex items-center justify-between border-b border-ink/15 pb-2">
+            <span className="flex items-center gap-2 label-micro text-ink normal-case">
+              <span className="w-5 h-5 rounded-full bg-ink text-paper flex items-center justify-center text-[11px] font-bold">
                 2
               </span>
               Chụp / Đính Kèm Ảnh (Tùy chọn)
@@ -336,11 +334,11 @@ export const CaptureRoute: React.FC<CaptureRouteProps> = ({ isOnline, onEntrySav
           </div>
 
           {photoPreviewUrl ? (
-            <div className="relative rounded-2xl overflow-hidden border border-slate-700 group">
+            <div className="relative rounded-card overflow-hidden border border-ink group">
               <img src={photoPreviewUrl} alt="Ảnh đính kèm" className="w-full h-40 object-cover" />
               <button
                 onClick={clearPhoto}
-                className="absolute top-2.5 right-2.5 p-1.5 rounded-xl bg-slate-950/80 text-rose-400 hover:bg-rose-500 hover:text-white transition backdrop-blur-md"
+                className="absolute top-2.5 right-2.5 p-1.5 rounded-[0.6rem] bg-paper border border-ink text-danger hover:bg-danger hover:text-paper transition"
               >
                 <Trash2 className="w-4 h-4" />
               </button>
@@ -349,10 +347,10 @@ export const CaptureRoute: React.FC<CaptureRouteProps> = ({ isOnline, onEntrySav
             <button
               onClick={() => fileInputRef.current?.click()}
               disabled={isSubmitting}
-              className="w-full h-24 rounded-2xl border border-dashed border-slate-700 hover:border-amber-400/50 bg-slate-900/40 hover:bg-slate-900/80 flex flex-col items-center justify-center gap-1.5 transition cursor-pointer disabled:opacity-50"
+              className="w-full h-24 rounded-card border border-dashed border-ink/60 hover:border-ink bg-paper-soft/50 hover:bg-paper-soft flex flex-col items-center justify-center gap-1.5 transition cursor-pointer disabled:opacity-50"
             >
-              <Camera className="w-6 h-6 text-amber-400/80" />
-              <span className="text-xs text-slate-400 font-medium">Chạm để chọn hoặc chụp ảnh</span>
+              <Camera className="w-6 h-6 text-ink-soft" />
+              <span className="text-xs text-ink-soft font-medium">Chạm để chọn hoặc chụp ảnh</span>
             </button>
           )}
 
@@ -367,9 +365,9 @@ export const CaptureRoute: React.FC<CaptureRouteProps> = ({ isOnline, onEntrySav
         </div>
 
         {/* STEP 3: MANUAL SAVE ENTRY BUTTON */}
-        <div className="space-y-2 pt-2 border-t border-slate-800/80">
-          <div className="flex items-center gap-2 text-xs font-bold text-emerald-400 mb-1">
-            <span className="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center text-[11px] font-bold">
+        <div className="space-y-2 pt-2 border-t border-ink/15">
+          <div className="flex items-center gap-2 label-micro text-ink normal-case mb-1">
+            <span className="w-5 h-5 rounded-full bg-positive text-paper flex items-center justify-center text-[11px] font-bold">
               3
             </span>
             Lưu Nhật Ký Ngày
@@ -379,7 +377,7 @@ export const CaptureRoute: React.FC<CaptureRouteProps> = ({ isOnline, onEntrySav
             type="button"
             onClick={handleSubmit}
             disabled={isSubmitting || (!audioBlob && !photoBlob)}
-            className="w-full py-4 rounded-2xl bg-gradient-to-r from-sky-400 via-sky-500 to-indigo-500 hover:from-sky-300 hover:to-indigo-400 text-slate-950 font-bold text-base shadow-xl shadow-sky-500/25 active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            className="btn-primary w-full py-4 text-base active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
             {isSubmitting ? (
               <>

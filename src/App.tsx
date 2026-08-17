@@ -92,7 +92,7 @@ export function App() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col selection:bg-sky-500 selection:text-slate-950">
+    <div className="min-h-screen bg-paper text-ink flex flex-col">
       {/* Top Navbar & Bottom Navigation (4 Tabs) */}
       <Navbar
         currentRoute={currentRoute}
