@@ -24,21 +24,20 @@ export const Toast: React.FC<ToastProps> = ({
 
   if (!isOpen) return null;
 
+  const styles =
+    type === 'success'
+      ? { bg: 'bg-positive-soft', text: 'text-positive', Icon: CheckCircle2 }
+      : type === 'error'
+      ? { bg: 'bg-danger-soft', text: 'text-danger', Icon: AlertCircle }
+      : { bg: 'bg-info-soft', text: 'text-info', Icon: Info };
+
+  const { bg, text, Icon } = styles;
+
   return (
-    <div className="fixed top-16 left-1/2 -translate-x-1/2 z-50 animate-bounce-in w-[90%] max-w-sm">
-      <div
-        className={`flex items-center gap-3 px-4 py-3 rounded-2xl glass-card border shadow-2xl ${
-          type === 'success'
-            ? 'border-emerald-500/30 text-emerald-300 bg-slate-900/90'
-            : type === 'error'
-            ? 'border-rose-500/30 text-rose-300 bg-slate-900/90'
-            : 'border-sky-500/30 text-sky-300 bg-slate-900/90'
-        }`}
-      >
-        {type === 'success' && <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />}
-        {type === 'error' && <AlertCircle className="w-5 h-5 text-rose-400 shrink-0" />}
-        {type === 'info' && <Info className="w-5 h-5 text-sky-400 shrink-0" />}
-        <span className="text-xs font-semibold">{message}</span>
+    <div className="fixed top-16 left-1/2 -translate-x-1/2 z-50 animate-bounce-in w-[90%] max-w-sm" role="status">
+      <div className={`flex items-center gap-3 px-4 py-3 rounded-card border border-ink ${bg}`}>
+        <Icon className={`w-5 h-5 shrink-0 ${text}`} />
+        <span className="text-xs font-semibold text-ink">{message}</span>
       </div>
     </div>
   );

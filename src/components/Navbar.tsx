@@ -12,6 +12,13 @@ interface NavbarProps {
   onSignOut: () => void;
 }
 
+const TABS: Array<{ id: 'capture' | 'diary' | 'digest' | 'sync'; label: string; icon: React.ElementType }> = [
+  { id: 'capture', label: 'Ghi Nhận', icon: Mic },
+  { id: 'diary', label: 'Nhật Ký', icon: BookOpen },
+  { id: 'digest', label: 'Tổng Hợp', icon: Sparkles },
+  { id: 'sync', label: 'Đồng Bộ', icon: RefreshCw }
+];
+
 export const Navbar: React.FC<NavbarProps> = ({
   currentRoute,
   onNavigate,
@@ -24,31 +31,34 @@ export const Navbar: React.FC<NavbarProps> = ({
   return (
     <>
       {/* Top Header Bar */}
-      <header className="sticky top-0 z-40 w-full glass-panel px-4 py-3 flex items-center justify-between border-b border-slate-800/80">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-sky-400 to-amber-400 flex items-center justify-center font-bold text-slate-950 text-sm shadow-md shadow-sky-500/20">
+      <header className="sticky top-0 z-40 w-full bg-paper/95 backdrop-saturate-150 px-4 py-3 flex items-center justify-between border-b border-ink">
+        <div className="flex items-center gap-2.5">
+          <div className="w-9 h-9 rounded-[0.7rem] bg-ink flex items-center justify-center font-bold text-paper text-sm shrink-0">
             SO
           </div>
-          <div>
-            <h1 className="text-base font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-slate-100 to-slate-400">
-              Siteop <span className="text-xs font-medium px-1.5 py-0.5 rounded bg-sky-500/10 text-sky-400 border border-sky-500/20 ml-1">PWA</span>
+          <div className="leading-tight">
+            <h1 className="text-base font-bold tracking-tight text-ink flex items-center gap-1.5">
+              Siteop
+              <span className="label-micro px-1.5 py-0.5 rounded-pill bg-accent-soft text-ink border border-ink normal-case font-bold tracking-normal">
+                PWA
+              </span>
             </h1>
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           {/* Online/Offline Status Indicator */}
           <div
-            className={`flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border transition-all ${
+            className={`pill px-2.5 py-1 border ${
               isOnline
-                ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                : 'bg-amber-500/15 text-amber-400 border-amber-500/30 animate-pulse'
+                ? 'bg-positive-soft text-positive border-ink'
+                : 'bg-warning-soft text-warning border-ink'
             }`}
           >
             {isOnline ? <Wifi className="w-3.5 h-3.5" /> : <WifiOff className="w-3.5 h-3.5" />}
-            <span className="font-medium">{isOnline ? 'Online' : 'Offline'}</span>
+            <span>{isOnline ? 'Online' : 'Offline'}</span>
             {offlineCount > 0 && (
-              <span className="bg-amber-500 text-slate-950 font-bold px-1.5 py-0.2 rounded-full text-[10px]">
+              <span className="bg-ink text-paper font-bold px-1.5 rounded-pill text-[10px] leading-4">
                 {offlineCount}
               </span>
             )}
@@ -58,18 +68,15 @@ export const Navbar: React.FC<NavbarProps> = ({
           {user ? (
             <button
               onClick={onSignOut}
-              className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-300 border border-slate-700 transition"
+              className="pill btn-outline px-2.5 py-1.5"
               title={`Logged in as ${user.email}`}
             >
-              <User className="w-3.5 h-3.5 text-sky-400" />
-              <span className="max-w-[70px] truncate hidden sm:inline">{user.email}</span>
-              <LogOut className="w-3.5 h-3.5 ml-0.5 opacity-70" />
+              <User className="w-3.5 h-3.5" />
+              <span className="max-w-[70px] truncate hidden sm:inline font-semibold">{user.email}</span>
+              <LogOut className="w-3.5 h-3.5 opacity-70" />
             </button>
           ) : (
-            <button
-              onClick={onOpenAuth}
-              className="flex items-center gap-1 text-xs font-semibold px-3 py-1.5 rounded-lg bg-sky-500 hover:bg-sky-400 text-slate-950 shadow-sm shadow-sky-500/20 transition"
-            >
+            <button onClick={onOpenAuth} className="pill btn-primary px-3 py-1.5">
               <LogIn className="w-3.5 h-3.5" />
               <span>Đăng nhập</span>
             </button>
@@ -78,55 +85,29 @@ export const Navbar: React.FC<NavbarProps> = ({
       </header>
 
       {/* Bottom Floating Navigation (4 Tabs: Ghi Nhận / Nhật Ký / Tổng Hợp / Đồng Bộ) */}
-      <nav className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 w-[94%] max-w-md glass-panel rounded-2xl p-1.5 border border-slate-700/60 shadow-2xl shadow-slate-950/80">
+      <nav
+        className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 w-[94%] max-w-md card p-1.5"
+        aria-label="Điều hướng chính"
+      >
         <div className="grid grid-cols-4 gap-1">
-          <button
-            onClick={() => onNavigate('capture')}
-            className={`flex flex-col items-center justify-center py-2 rounded-xl transition-all ${
-              currentRoute === 'capture'
-                ? 'bg-sky-500/15 text-sky-400 font-semibold shadow-inner border border-sky-500/30'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
-            }`}
-          >
-            <Mic className="w-4 h-4 mb-0.5" />
-            <span className="text-[11px]">Ghi Nhận</span>
-          </button>
-
-          <button
-            onClick={() => onNavigate('diary')}
-            className={`flex flex-col items-center justify-center py-2 rounded-xl transition-all ${
-              currentRoute === 'diary'
-                ? 'bg-sky-500/15 text-sky-400 font-semibold shadow-inner border border-sky-500/30'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
-            }`}
-          >
-            <BookOpen className="w-4 h-4 mb-0.5" />
-            <span className="text-[11px]">Nhật Ký</span>
-          </button>
-
-          <button
-            onClick={() => onNavigate('digest')}
-            className={`flex flex-col items-center justify-center py-2 rounded-xl transition-all ${
-              currentRoute === 'digest'
-                ? 'bg-amber-500/15 text-amber-400 font-semibold shadow-inner border border-amber-500/30'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
-            }`}
-          >
-            <Sparkles className="w-4 h-4 mb-0.5" />
-            <span className="text-[11px]">Tổng Hợp</span>
-          </button>
-
-          <button
-            onClick={() => onNavigate('sync')}
-            className={`flex flex-col items-center justify-center py-2 rounded-xl transition-all ${
-              currentRoute === 'sync'
-                ? 'bg-sky-500/15 text-sky-400 font-semibold shadow-inner border border-sky-500/30'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
-            }`}
-          >
-            <RefreshCw className="w-4 h-4 mb-0.5" />
-            <span className="text-[11px]">Đồng Bộ</span>
-          </button>
+          {TABS.map(({ id, label, icon: Icon }) => {
+            const isActive = currentRoute === id;
+            return (
+              <button
+                key={id}
+                onClick={() => onNavigate(id)}
+                aria-current={isActive ? 'page' : undefined}
+                className={`flex flex-col items-center justify-center gap-0.5 py-2 rounded-[0.85rem] transition-all ${
+                  isActive
+                    ? 'bg-accent text-ink font-bold border border-ink'
+                    : 'text-ink-soft hover:text-ink hover:bg-paper-soft border border-transparent'
+                }`}
+              >
+                <Icon className="w-4 h-4" />
+                <span className="text-[11px]">{label}</span>
+              </button>
+            );
+          })}
         </div>
       </nav>
     </>

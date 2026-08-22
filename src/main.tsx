@@ -29,15 +29,15 @@ class ErrorBoundary extends Component<Props, State> {
   public render() {
     if (this.state.hasError) {
       return (
-        <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-6 text-center">
-          <div className="max-w-md glass-card rounded-3xl p-6 border border-slate-700/80 space-y-4">
-            <h2 className="text-lg font-bold text-rose-400">Gặp Lỗi Khi Tải Ứng Dụng</h2>
-            <p className="text-xs text-slate-300">
+        <div className="min-h-screen bg-paper text-ink flex items-center justify-center p-6 text-center">
+          <div className="max-w-md card p-6 space-y-4">
+            <h2 className="text-lg font-bold text-danger">Gặp Lỗi Khi Tải Ứng Dụng</h2>
+            <p className="text-xs text-ink-soft">
               {this.state.error?.message || 'Có lỗi xảy ra trong quá trình khởi chạy giao diện.'}
             </p>
             <button
               onClick={() => window.location.reload()}
-              className="px-4 py-2 rounded-xl bg-sky-500 text-slate-950 font-bold text-xs"
+              className="btn-primary px-4 py-2 text-xs"
             >
               Tải lại trang
             </button>
